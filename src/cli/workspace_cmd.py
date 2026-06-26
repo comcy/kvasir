@@ -1,4 +1,4 @@
-"""devtrack workspace <sub-command>"""
+"""mimirlink workspace <sub-command>"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,7 +8,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from devtrack.workspace.manager import WorkspaceManager, WorkspaceError
+from src.workspace.manager import WorkspaceManager, WorkspaceError
 
 app = typer.Typer(help="Manage workspaces (create / list / use / delete).")
 console = Console()
@@ -42,7 +42,7 @@ def list_workspaces() -> None:
 
     workspaces = _wm.list()
     if not workspaces:
-        console.print("No workspaces yet. Run: devtrack workspace create <name>")
+        console.print("No workspaces yet. Run: mimirlink workspace create <name>")
         return
 
     table = Table(show_header=True, header_style="bold")

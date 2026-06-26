@@ -40,7 +40,7 @@ class MetricPanel(Widget):
     def compose(self) -> ComposeResult:
         if not self._metrics:
             yield Static(
-                "  [dim]No metrics defined yet.[/dim]\n  devtrack metric define ...",
+                "  [dim]No metrics defined yet.[/dim]\n  mimirlink metric define ...",
                 classes="empty-hint",
             )
             return

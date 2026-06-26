@@ -47,7 +47,7 @@ class SessionPanel(Widget):
     def compose(self) -> ComposeResult:
         if not self._sessions:
             yield Static(
-                "  [dim]No sessions yet.[/dim]\n  devtrack session start",
+                "  [dim]No sessions yet.[/dim]\n  mimirlink session start",
                 classes="empty-hint",
             )
             return

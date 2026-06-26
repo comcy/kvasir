@@ -1,4 +1,4 @@
-"""devtrack todo <sub-command>"""
+"""mimirlink todo <sub-command>"""
 from __future__ import annotations
 
 import uuid
@@ -9,7 +9,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from devtrack.workspace.manager import WorkspaceManager, WorkspaceError
+from src.workspace.manager import WorkspaceManager, WorkspaceError
 
 app = typer.Typer(help="Manage todos.")
 console = Console()

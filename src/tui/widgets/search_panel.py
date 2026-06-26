@@ -10,7 +10,7 @@ from textual.widget import Widget
 from textual.widgets import Input, Label, ListItem, ListView, Static
 from textual.containers import Vertical
 
-from devtrack.workspace.manager import WorkspaceManager
+from src.workspace.manager import WorkspaceManager
 
 
 class ResultItem(ListItem):

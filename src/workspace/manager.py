@@ -9,7 +9,7 @@ from .config import (
     load_global_config,
     save_global_config,
 )
-from devtrack.data.store import NdjsonStore
+from src.data.store import NdjsonStore
 
 
 class WorkspaceError(Exception):
@@ -17,10 +17,10 @@ class WorkspaceError(Exception):
 
 
 class WorkspaceManager:
-    DEFAULT_DIR = Path.home() / ".devtrack"
+    DEFAULT_DIR = Path.home() / ".mimirlink"
 
-    def __init__(self, devtrack_dir: Path | None = None) -> None:
-        self.devtrack_dir = devtrack_dir or self.DEFAULT_DIR
+    def __init__(self, mimirlink_dir: Path | None = None) -> None:
+        self.devtrack_dir = mimirlink_dir or self.DEFAULT_DIR
         self._config: GlobalConfig | None = None
 
     # ------------------------------------------------------------------
@@ -101,7 +101,7 @@ class WorkspaceManager:
         name = self.config.active_workspace
         if not name:
             raise WorkspaceError(
-                "No active workspace. Run: devtrack workspace create <name>"
+                "No active workspace. Run: mimirlink workspace create <name>"
             )
         ws = self._find(name)
         if not ws:

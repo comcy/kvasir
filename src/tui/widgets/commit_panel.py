@@ -27,7 +27,7 @@ class CommitPanel(Widget):
     def compose(self) -> ComposeResult:
         if not self._commits:
             yield Static(
-                "  [dim]No commits tracked yet.[/dim]\n  Use: devtrack commit",
+                "  [dim]No commits tracked yet.[/dim]\n  Use: mimirlink commit",
                 classes="empty-hint",
             )
             return

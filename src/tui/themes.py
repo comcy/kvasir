@@ -1,4 +1,4 @@
-"""Custom Textual themes for devtrack."""
+"""Custom Textual themes for mimirlink."""
 from textual.theme import Theme
 
 THEMES: dict[str, Theme] = {

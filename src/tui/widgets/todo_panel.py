@@ -41,7 +41,7 @@ class TodoPanel(Widget):
 
         with Vertical():
             if not self.todos:
-                yield Static("  [dim]No todos yet.[/dim]\n  devtrack todo add \"...\"", classes="empty-hint")
+                yield Static("  [dim]No todos yet.[/dim]\n  mimirlink todo add \"...\"", classes="empty-hint")
                 return
 
             yield Static(

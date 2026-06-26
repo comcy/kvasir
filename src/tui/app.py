@@ -1,23 +1,26 @@
 """DevTrack TUI – main Textual application."""
 from __future__ import annotations
 
+import shlex
+import subprocess
 from datetime import date
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
-from textual.widgets import Footer, Header, Static, TabbedContent, TabPane
+from textual.screen import ModalScreen
+from textual.widgets import Footer, Header, Input, RichLog, Static, TabbedContent, TabPane
 
-from devtrack.workspace.manager import WorkspaceManager, WorkspaceError
-from devtrack.tui.themes import THEMES, THEME_NAMES
-from devtrack.tui.widgets.todo_panel import TodoPanel
-from devtrack.tui.widgets.metric_panel import MetricPanel
-from devtrack.tui.widgets.commit_panel import CommitPanel
-from devtrack.tui.widgets.session_panel import SessionPanel
-from devtrack.tui.widgets.todo_manager import TodoManager
-from devtrack.tui.widgets.notes_panel import NotesPanel
-from devtrack.tui.widgets.search_panel import SearchPanel
+from src.workspace.manager import WorkspaceManager, WorkspaceError
+from src.tui.themes import THEMES, THEME_NAMES
+from src.tui.widgets.todo_panel import TodoPanel
+from src.tui.widgets.metric_panel import MetricPanel
+from src.tui.widgets.commit_panel import CommitPanel
+from src.tui.widgets.session_panel import SessionPanel
+from src.tui.widgets.todo_manager import TodoManager
+from src.tui.widgets.notes_panel import NotesPanel
+from src.tui.widgets.search_panel import SearchPanel
 
 APP_CSS = """
 Screen { background: $background; }
@@ -104,19 +107,75 @@ Footer { height: 1; background: $surface; color: $foreground 70%; }
 """
 
 
+class CommandBarScreen(ModalScreen[None]):
+    """Quick command bar — type mimirlink subcommands and see output inline."""
+
+    DEFAULT_CSS = """
+    CommandBarScreen { align: center middle; }
+    #cmd-dialog {
+        width: 84; height: 24;
+        background: $surface; border: round $secondary; padding: 1 2;
+    }
+    #cmd-title { color: $secondary; text-style: bold; margin-bottom: 1; }
+    #cmd-output { height: 1fr; border: solid $panel; margin: 1 0; padding: 0 1; }
+    #cmd-hint { color: $foreground 40%; }
+    """
+
+    BINDINGS = [("escape", "dismiss", "Close")]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="cmd-dialog"):
+            yield Static("  mimirlink — command bar", id="cmd-title")
+            yield Input(
+                placeholder="note export my-note.md  ·  todo list  ·  summary",
+                id="cmd-input",
+            )
+            yield RichLog(id="cmd-output", markup=True, highlight=False)
+            yield Static("  [dim]Enter: run  ·  Escape: close[/dim]", id="cmd-hint")
+
+    def on_mount(self) -> None:
+        self.query_one("#cmd-input", Input).focus()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        cmd_str = event.value.strip()
+        if not cmd_str:
+            return
+        log = self.query_one("#cmd-output", RichLog)
+        log.write(f"[dim]$ mimirlink {cmd_str}[/dim]")
+        try:
+            result = subprocess.run(
+                ["mimirlink"] + shlex.split(cmd_str),
+                capture_output=True, text=True, timeout=30,
+            )
+            if result.stdout:
+                log.write(result.stdout.rstrip())
+            if result.stderr:
+                log.write(f"[yellow]{result.stderr.rstrip()}[/yellow]")
+            if result.returncode != 0 and not result.stdout and not result.stderr:
+                log.write(f"[red]Exit code: {result.returncode}[/red]")
+        except FileNotFoundError:
+            log.write("[red]mimirlink not found in PATH[/red]")
+        except subprocess.TimeoutExpired:
+            log.write("[red]Command timed out after 30s[/red]")
+        except Exception as exc:
+            log.write(f"[red]{exc}[/red]")
+        self.query_one("#cmd-input", Input).clear()
+
+
 class DevTrackApp(App):
-    TITLE = "devtrack"
+    TITLE = "mimirlink"
     CSS = APP_CSS
 
     BINDINGS = [
-        Binding("q",   "quit",              "Quit",      priority=True),
-        Binding("t",   "next_theme",         "Theme"),
-        Binding("r",   "reload_dashboard",   "Reload"),
-        Binding("1",   "switch_tab('tab-dashboard')", "Dashboard"),
-        Binding("2",   "switch_tab('tab-todos')",     "TODOs"),
-        Binding("3",   "switch_tab('tab-notes')",     "Notes"),
-        Binding("4",   "switch_tab('tab-search')",    "Search"),
-        Binding("/",   "open_search",        "Search",   show=False),
+        Binding("q",      "quit",              "Quit",        priority=True),
+        Binding("t",      "next_theme",         "Theme"),
+        Binding("r",      "reload_dashboard",   "Reload"),
+        Binding("1",      "switch_tab('tab-dashboard')", "Dashboard"),
+        Binding("2",      "switch_tab('tab-todos')",     "TODOs"),
+        Binding("3",      "switch_tab('tab-notes')",     "Notes"),
+        Binding("4",      "switch_tab('tab-search')",    "Search"),
+        Binding("/",      "open_search",        "Search",     show=False),
+        Binding("ctrl+p", "command_bar",        "Command bar"),
     ]
 
     _theme_idx: reactive[int] = reactive(0)
@@ -155,7 +214,7 @@ class DevTrackApp(App):
         yield Static(
             f"  workspace: [bold]{ws}[/bold]  ·  {today}"
             f"  ·  theme: [italic]{theme}[/italic]"
-            f"  ·  [dim]1-4=tabs  t=theme  /=search  q=quit[/dim]",
+            f"  ·  [dim]1-4=tabs  t=theme  /=search  ctrl+p=cmd  q=quit[/dim]",
             id="workspace-bar",
         )
 
@@ -236,6 +295,9 @@ class DevTrackApp(App):
         self.refresh(recompose=True)
         self.notify("Reloaded", timeout=1.0)
 
+    def action_command_bar(self) -> None:
+        self.push_screen(CommandBarScreen())
+
     def _update_bar(self) -> None:
         try:
             ws = self._wm.active().name
@@ -246,5 +308,5 @@ class DevTrackApp(App):
         self.query_one("#workspace-bar", Static).update(
             f"  workspace: [bold]{ws}[/bold]  ·  {today}"
             f"  ·  theme: [italic]{theme}[/italic]"
-            f"  ·  [dim]1-4=tabs  t=theme  /=search  q=quit[/dim]"
+            f"  ·  [dim]1-4=tabs  t=theme  /=search  ctrl+p=cmd  q=quit[/dim]"
         )

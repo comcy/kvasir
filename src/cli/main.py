@@ -1,4 +1,4 @@
-"""devtrack CLI – entry point. Sub-commands are registered as Typer apps."""
+"""mimirlink CLI – entry point. Sub-commands are registered as Typer apps."""
 from __future__ import annotations
 
 import typer
@@ -7,10 +7,12 @@ from rich.console import Console
 from .workspace_cmd import app as workspace_app
 from .todo_cmd import app as todo_app
 from .metric_cmd import app as metric_app
+from .hooks_cmd import app as hooks_app, hook_app
+from .note_cmd import app as note_app
 
 console = Console()
 app = typer.Typer(
-    name="devtrack",
+    name="mimirlink",
     help="Local, offline-first developer workflow & journaling tool.",
     no_args_is_help=True,
 )
@@ -18,6 +20,9 @@ app = typer.Typer(
 app.add_typer(workspace_app, name="workspace")
 app.add_typer(todo_app, name="todo")
 app.add_typer(metric_app, name="metric")
+app.add_typer(hooks_app, name="hooks")
+app.add_typer(hook_app, name="hook")
+app.add_typer(note_app, name="note")
 
 
 @app.command()
@@ -25,8 +30,8 @@ def tui(
     theme: str = typer.Option("dracula", "--theme", "-t", help="Starting theme: dracula|nord|tokyo-night|gruvbox|catppuccin|solarized"),
 ) -> None:
     """Launch the interactive TUI dashboard."""
-    from devtrack.tui.app import DevTrackApp
-    from devtrack.tui.themes import THEME_NAMES
+    from src.tui.app import DevTrackApp
+    from src.tui.themes import THEME_NAMES
 
     if theme not in THEME_NAMES:
         console.print(f"[red]Unknown theme '{theme}'. Choose from: {', '.join(THEME_NAMES)}[/red]")
@@ -38,7 +43,7 @@ def tui(
 @app.command()
 def today() -> None:
     """Show a summary of today's work: sessions, commits, todos."""
-    from devtrack.workspace.manager import WorkspaceManager
+    from src.workspace.manager import WorkspaceManager
     from datetime import date
 
     wm = WorkspaceManager()
@@ -64,7 +69,7 @@ def today() -> None:
 @app.command()
 def summary() -> None:
     """Weekly summary: todos done, commits, metric values."""
-    from devtrack.workspace.manager import WorkspaceManager
+    from src.workspace.manager import WorkspaceManager
     from datetime import date, timedelta
 
     wm = WorkspaceManager()

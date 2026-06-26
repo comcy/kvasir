@@ -29,7 +29,11 @@ class TodoFormScreen(ModalScreen[dict | None]):
     Button { margin-left: 1; }
     """
 
-    def __init__(self, todo: dict | None = None, tag_names: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        todo: dict | None = None,
+        tag_names: list[str] | None = None,
+    ) -> None:
         super().__init__()
         self._todo = todo or {}
         self._tag_names = tag_names or []
@@ -43,6 +47,12 @@ class TodoFormScreen(ModalScreen[dict | None]):
                 value=self._todo.get("text", ""),
                 placeholder="What needs to be done?",
                 id="inp-text",
+            )
+            yield Label("Assignee  (@name, optional — leave blank for yourself)", classes="field-label")
+            yield Input(
+                value=self._todo.get("assignee") or "",
+                placeholder="@john",
+                id="inp-assignee",
             )
             yield Label("Due date  (YYYY-MM-DD, optional)", classes="field-label")
             yield Input(
@@ -78,7 +88,9 @@ class TodoFormScreen(ModalScreen[dict | None]):
         if not text:
             self.notify("Text is required.", severity="error")
             return
+        raw_assignee = self.query_one("#inp-assignee", Input).value.strip()
+        assignee = raw_assignee.lstrip("@") or None
         due = self.query_one("#inp-due", Input).value.strip() or None
-        raw = self.query_one("#inp-tags", Input).value
-        tags = [t.strip() for t in raw.split(",") if t.strip()]
-        self.dismiss({"text": text, "due_date": due, "tags": tags})
+        raw_tags = self.query_one("#inp-tags", Input).value
+        tags = [t.strip() for t in raw_tags.split(",") if t.strip()]
+        self.dismiss({"text": text, "assignee": assignee, "due_date": due, "tags": tags})
