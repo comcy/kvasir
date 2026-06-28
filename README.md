@@ -175,7 +175,16 @@ The journal follows a **bullet-journal hierarchy**:
 | `2026-W26.md` | Week | Weekly spread, week in review |
 | `2026-06-27.md` | Day | Daily log, meeting notes, quick captures |
 
-Files are auto-detected by name — no manual tagging required. New journal notes are created automatically with pre-filled frontmatter (title, type, tags).
+Files are auto-detected by name — no manual tagging required. New journal notes are created automatically with pre-filled frontmatter and a structured template:
+
+| Type | Template content |
+|------|-----------------|
+| **Year** | 12 month headings `## Januar · 2026-01` … `## Dezember · 2026-12` |
+| **Month** | Table `\| KW \| Tag \| Privat \| Geschäftlich \|` with all days; week number on Mondays; German weekday abbreviations (Mo/Di/Mi/Do/Fr/Sa/So) |
+| **Week** | 7 day headings `## Mo — 2026-06-22` … `## So — 2026-06-28` |
+| **Day** | `## Log` and `## Aufgaben` sections |
+
+Date strings inside templates (e.g. `2026-06-28`) are auto-linked in the preview panel — click them to navigate to that day's journal entry.
 
 #### Calendar navigation keys
 
@@ -213,14 +222,20 @@ Tags   #dev   #journal-day ●   #billing
 
 Click a tag pill to activate it. Multiple active tags = union (any note matching at least one tag is shown). Click again to deactivate. Use `r` to reload and reset the view.
 
-#### Note list columns
+#### Note list layout
 
-Each note shows:
-- Type prefix (日 day · W week · 月 month · 年 year · none for regular notes)
-- **Title** from frontmatter
-- `✎ YYYY-MM-DD HH:MM` — last edited
-- `+ YYYY-MM-DD` — created
-- Tag chips
+Each entry shows two lines:
+
+```
+ *D │ Today's daily journal          #journal-day
+    │ ✎ 2026-06-28 09:41
+```
+
+- **Badge** — `*D` today's day · `D` day · `W` week · `M` month · `Y` year · blank for regular notes
+- `│` separator · **Title** from frontmatter · tag chips
+- Second line: `✎ YYYY-MM-DD HH:MM` — last edited timestamp
+
+Journal entries are listed first (Year → Month → Week → Day, current period at top per level), followed by regular notes sorted by last-edited.
 
 #### Notes TUI keys (both modes)
 

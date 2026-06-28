@@ -63,8 +63,8 @@ class JournalCalendar(Widget, can_focus=True):
 
     # --------------------------------------------------------------- init
 
-    def __init__(self, entry_dates: set[date] | None = None) -> None:
-        super().__init__()
+    def __init__(self, entry_dates: set[date] | None = None, **kwargs) -> None:
+        super().__init__(**kwargs)
         self._entry_dates: set[date] = entry_dates or set()
 
     def update_entries(self, entry_dates: set[date]) -> None:

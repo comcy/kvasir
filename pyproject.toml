@@ -17,6 +17,7 @@ dependencies = [
     "watchdog>=4",
     "apscheduler>=3.10",
     "plyer>=2",
+    "weasyprint>=60",
     "tomli>=2; python_version < '3.11'",
 ]
 

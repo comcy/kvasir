@@ -13,7 +13,7 @@ from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widget import Widget
-from textual.widgets import Input, Label, ListItem, ListView, Markdown, Static
+from textual.widgets import Input, Label, ListItem, ListView, Markdown, Static, Tab, Tabs
 from textual.containers import Horizontal, Vertical, VerticalScroll
 
 from src.workspace.manager import WorkspaceManager
@@ -25,6 +25,11 @@ from src.tui.widgets.journal_calendar import JournalCalendar
 
 _WIKILINK_RE = re.compile(r'\[\[([^\]]+)\]\]')
 _IMG_RE = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
+# Matches YYYY-Wnn, YYYY-MM-DD, YYYY-MM — in that priority order.
+# Negative lookahead (?![-\d]) prevents matching the YYYY-MM part of a full YYYY-MM-DD.
+_DATE_RE = re.compile(r'\b(\d{4}-W\d{2}|\d{4}-\d{2}-\d{2}|\d{4}-\d{2})(?![-\d])')
+# Splits content into code-block / non-code-block alternating segments.
+_CODE_FENCE_RE = re.compile(r'(```[\s\S]*?```|`[^`\n]+`)')
 
 
 # ─────────────────────── shared pill ─────────────────────────────────────────
@@ -112,7 +117,7 @@ class WikilinkScreen(ModalScreen[str | None]):
     #wl-list { height: auto; max-height: 14; }
     ListItem { background: transparent; }
     ListItem:hover { background: $surface; }
-    ListView:focus > ListItem.--highlight { background: $surface; }
+    ListView:focus > ListItem.--highlight { background: $primary 20%; }
     #wl-hint { color: $foreground 40%; margin-top: 1; }
     """
 
@@ -161,34 +166,59 @@ class WikilinkScreen(ModalScreen[str | None]):
             self.dismiss(event.item.slug)
 
 
-# ─────────────────────── list item ───────────────────────────────────────────
+# ─────────────────────── list items ──────────────────────────────────────────
+
+_JOURNAL_TYPES = {"day", "week", "month", "year"}
+_JOURNAL_INDENT = {"year": 0, "month": 1, "week": 2, "day": 3}
+
+
+class _SectionHeader(ListItem):
+    """Non-interactive section divider between journal and regular notes."""
+
+    def __init__(self, label: str) -> None:
+        super().__init__()
+        self._label = label
+
+    def compose(self) -> ComposeResult:
+        yield Label(f"  [dim]── {self._label}[/dim]")
+
 
 class NoteItem(ListItem):
     def __init__(self, info: dict) -> None:
         super().__init__()
         self.info = info
 
+    def watch_highlighted(self, _: bool) -> None:
+        self.refresh(recompose=True)
+
     def compose(self) -> ComposeResult:
         title  = self.info.get("title", "Untitled")
         tags   = self.info.get("tags", [])
         ntype  = self.info.get("ntype", "note")
+        stem   = self.info["path"].stem
         edited = (self.info.get("editedAt") or "")[:16].replace("T", " ")
-        created = (self.info.get("created") or "")[:10]
+        sel    = self.highlighted
 
-        # Type prefix for journal notes
-        type_prefix = {
-            "day":   "[dim]日[/dim] ",
-            "week":  "[dim]W [/dim] ",
-            "month": "[dim]月[/dim] ",
-            "year":  "[dim]年[/dim] ",
-        }.get(ntype, "")
+        today_slug = date.today().isoformat()
+        if ntype == "day":
+            badge = "[bold]*D[/bold]" if stem == today_slug else "[dim] D[/dim]"
+        elif ntype == "week":  badge = "[dim] W[/dim]"
+        elif ntype == "month": badge = "[dim] M[/dim]"
+        elif ntype == "year":  badge = "[dim] Y[/dim]"
+        else:                  badge = "  "
+
+        # 2 spaces per hierarchy level (year=0, month=1, week=2, day=3)
+        pad = "  " * _JOURNAL_INDENT.get(ntype, 0)
 
         tags_str = "  " + " ".join(f"[dim][{t}][/dim]" for t in tags) if tags else ""
-        meta_parts = []
-        if edited:  meta_parts.append(f"✎ {edited}")
-        if created: meta_parts.append(f"+ {created}")
-        meta_str = "  [dim]" + "  ·  ".join(meta_parts) + "[/dim]" if meta_parts else ""
-        yield Label(f"  {type_prefix}[bold]{title}[/bold]{meta_str}{tags_str}")
+        arrow    = "[bold bright_cyan]▶[/bold bright_cyan]" if sel else " "
+        title_markup = f"[bold]{title}[/bold]"
+
+        # Line 1: arrow + hierarchy indent + badge │ title  tags
+        yield Label(f"{arrow} {pad}{badge} [dim]│[/dim] {title_markup}{tags_str}")
+        # Line 2: align │ under line 1's │ (arrow col = 1 char + 1 space = same as before)
+        if edited:
+            yield Label(f"  {pad}     [dim]│ ✎ {edited}[/dim]")
 
 
 # ─────────────────────── main panel ──────────────────────────────────────────
@@ -196,28 +226,6 @@ class NoteItem(ListItem):
 class NotesPanel(Widget):
     DEFAULT_CSS = """
     NotesPanel { height: 100%; }
-
-    /* ── mode tab bar ── */
-    #mode-bar {
-        height: 1;
-        background: $surface;
-        padding: 0 1;
-        border-bottom: solid $panel;
-    }
-    FilterPill.mode-pill {
-        height: 1;
-        width: auto;
-        padding: 0 2;
-        margin-right: 1;
-        background: $panel;
-        color: $foreground 45%;
-    }
-    FilterPill.mode-pill:hover { color: $foreground; }
-    FilterPill.mode-pill.active {
-        background: $secondary 25%;
-        color: $secondary;
-        text-style: bold;
-    }
 
     /* ── journal mode ── */
     #journal-split { height: 1fr; }
@@ -300,7 +308,18 @@ class NotesPanel(Widget):
 
     ListItem { background: transparent; padding: 0; }
     ListItem:hover { background: $surface; }
-    ListView:focus > ListItem.--highlight { background: $surface; }
+    ListView:focus > ListItem.--highlight { background: $primary 20%; }
+
+    NoteItem { height: auto; padding: 1 0 0 0; }
+
+    _SectionHeader {
+        height: 1;
+        background: $background;
+        margin-top: 1;
+        padding: 0;
+    }
+    _SectionHeader:hover { background: $background; }
+    ListView:focus > _SectionHeader.--highlight { background: $background; }
 
     #notes-empty { padding: 2 4; color: $foreground 45%; }
     """
@@ -312,7 +331,6 @@ class NotesPanel(Widget):
         ("p", "paste_image",     "Paste image"),
         ("l", "insert_wikilink", "Link [[]]"),
         ("r", "reload",          "Reload"),
-        ("tab", "toggle_mode",   "Switch view"),
     ]
 
     _mode: reactive[str] = reactive("notes")        # "journal" | "notes"
@@ -371,6 +389,102 @@ class NotesPanel(Widget):
             return notes
         return [n for n in notes if any(t in n.get("tags", []) for t in self._tag_filters)]
 
+    def _sort_journal_entries(self, notes: list[dict]) -> list[dict]:
+        """
+        Return journal notes in hierarchical order:
+          current-year → (current-month → (current-week → days desc) → past weeks) → past months
+          → past years
+
+        Each "parent" note (year/month/week) appears before its children.
+        Current period at each level always floats to the top.
+        """
+        today = date.today()
+        iso_today  = today.isocalendar()
+        cur_year   = today.year
+        cur_month  = today.strftime("%Y-%m")
+        cur_week   = f"{iso_today.year}-W{iso_today.week:02d}"
+
+        year_map:  dict[str, dict] = {}
+        month_map: dict[str, dict] = {}
+        week_map:  dict[str, dict] = {}
+        day_map:   dict[str, dict] = {}
+        for n in notes:
+            s = n["path"].stem
+            t = n.get("ntype")
+            if   t == "year":  year_map[s]  = n
+            elif t == "month": month_map[s] = n
+            elif t == "week":  week_map[s]  = n
+            elif t == "day":   day_map[s]   = n
+
+        def _week_month(w: str) -> str:
+            """YYYY-MM of the Thursday of ISO week w (= the month this week belongs to)."""
+            wy, wn = int(w[:4]), int(w[6:])
+            return date.fromisocalendar(wy, wn, 4).strftime("%Y-%m")
+
+        def _day_week(d: str) -> str:
+            iso = date.fromisoformat(d).isocalendar()
+            return f"{iso.year}-W{iso.week:02d}"
+
+        # ── collect all year buckets ─────────────────────────────────────
+        all_years: set[int] = set()
+        for s in year_map:  all_years.add(int(s))
+        for s in month_map: all_years.add(int(s[:4]))
+        for s in week_map:  all_years.add(int(_week_month(s)[:4]))
+        for s in day_map:   all_years.add(date.fromisoformat(s).year)
+
+        sorted_years = sorted(all_years,
+            key=lambda y: (0 if y == cur_year else 1, -y))
+
+        result: list[dict] = []
+
+        for year_int in sorted_years:
+            year_str = str(year_int)
+            if year_str in year_map:
+                result.append(year_map[year_str])
+
+            # ── collect all month buckets for this year ───────────────────
+            months: set[str] = set()
+            for s in month_map:
+                if s[:4] == year_str: months.add(s)
+            for s in week_map:
+                m = _week_month(s)
+                if m[:4] == year_str: months.add(m)
+            for s in day_map:
+                if date.fromisoformat(s).year == year_int:
+                    months.add(date.fromisoformat(s).strftime("%Y-%m"))
+
+            sorted_months = sorted(months,
+                key=lambda m: (0 if m == cur_month else 1, -int(m[5:7])))
+
+            for month_str in sorted_months:
+                if month_str in month_map:
+                    result.append(month_map[month_str])
+
+                # ── collect all week buckets for this month ───────────────
+                weeks: set[str] = set()
+                for s in week_map:
+                    if _week_month(s) == month_str: weeks.add(s)
+                for s in day_map:
+                    w = _day_week(s)
+                    if _week_month(w) == month_str: weeks.add(w)
+
+                sorted_weeks = sorted(weeks,
+                    key=lambda w: (0 if w == cur_week else 1, -int(w[6:])))
+
+                for week_str in sorted_weeks:
+                    if week_str in week_map:
+                        result.append(week_map[week_str])
+
+                    # days in this week, descending
+                    week_days = sorted(
+                        [day_map[s] for s in day_map if _day_week(s) == week_str],
+                        key=lambda n: n["path"].stem,
+                        reverse=True,
+                    )
+                    result.extend(week_days)
+
+        return result
+
     # ---------------------------------------------------------------- content
 
     def _rendered_content(self, raw: str) -> str:
@@ -380,6 +494,7 @@ class NotesPanel(Widget):
         except Exception:
             content = raw
         content = self._resolve_wikilinks(content)
+        content = self._linkify_dates(content)
         content = self._fix_images(content)
         return content
 
@@ -415,11 +530,56 @@ class NotesPanel(Widget):
 
         return _IMG_RE.sub(fix, content)
 
+    def _linkify_dates(self, content: str) -> str:
+        """Convert bare ISO dates to date: links, skipping code blocks."""
+        parts = _CODE_FENCE_RE.split(content)
+        out = []
+        for i, part in enumerate(parts):
+            if i % 2 == 1:      # inside a code span / fence — leave untouched
+                out.append(part)
+            else:
+                out.append(_DATE_RE.sub(
+                    lambda m: f"[📅 {m.group(1)}](date:{m.group(1)})",
+                    part,
+                ))
+        return "".join(out)
+
+    def _backlinks_section(self, path: Path) -> str:
+        """Return a Markdown backlinks block for journal notes, or '' for regular notes."""
+        ntype = note_type(path.stem)
+        if ntype == "note":
+            return ""
+        slug = path.stem
+        try:
+            nd = self._wm.notes_dir()
+        except Exception:
+            return ""
+        refs: list[str] = []
+        for p in sorted(nd.glob("*.md")):
+            if p == path:
+                continue
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+                if slug not in text:
+                    continue
+                try:
+                    post = frontmatter.load(str(p))
+                    title = post.metadata.get("title", p.stem)
+                except Exception:
+                    title = p.stem
+                refs.append(f"- [\\[\\[{p.stem}\\]\\]](note:{p.stem}) — {title}")
+            except Exception:
+                continue
+        if not refs:
+            return ""
+        lines = "\n".join(refs)
+        return f"\n\n---\n**Referenced in** ({len(refs)})\n\n{lines}\n"
+
     def _navigate_to_note(self, path: Path) -> None:
         self._selected_path = path
         try:
             post = frontmatter.load(str(path))
-            content = self._rendered_content(post.content)
+            content = self._rendered_content(post.content) + self._backlinks_section(path)
             title = post.metadata.get("title", path.stem)
         except Exception:
             content = path.read_text(encoding="utf-8", errors="replace")
@@ -452,12 +612,13 @@ class NotesPanel(Widget):
         iso = today.isocalendar()
 
         with Vertical():
-            # ── Mode tab bar ────────────────────────────────────────────────
-            with Horizontal(id="mode-bar"):
-                for mode_id, label in [("mode-journal", "Journal"), ("mode-notes", "Notes")]:
-                    active = self._mode == mode_id[5:]  # "journal" or "notes"
-                    cls = "mode-pill active" if active else "mode-pill"
-                    yield FilterPill(label, pill_id=mode_id, classes=cls)
+            # ── Mode tab bar (Textual Tabs — arrow keys to switch) ───────────
+            active_tab = "tab-journal" if self._mode == "journal" else "tab-notes"
+            yield Tabs(
+                Tab("Journal", id="tab-journal"),
+                Tab("Notes",   id="tab-notes"),
+                active=active_tab,
+            )
 
             # ── Journal mode ─────────────────────────────────────────────────
             if self._mode == "journal":
@@ -492,6 +653,12 @@ class NotesPanel(Widget):
             else:
                 filtered = self._filtered_notes(notes)
 
+                # Split into journal entries and regular notes
+                journals = self._sort_journal_entries(
+                    [n for n in filtered if n.get("ntype") in _JOURNAL_TYPES]
+                )
+                regular = [n for n in filtered if n.get("ntype") not in _JOURNAL_TYPES]
+
                 if all_tags:
                     with Horizontal(id="tag-bar"):
                         yield Label("Tags", classes="tag-filter-label")
@@ -501,9 +668,19 @@ class NotesPanel(Widget):
 
                 with Horizontal(id="split"):
                     with Vertical(id="list-col"):
-                        yield Static(f"  Notes ({len(filtered)})", id="list-header")
+                        yield Static(
+                            f"  {len(filtered)} note{'s' if len(filtered) != 1 else ''}",
+                            id="list-header",
+                        )
                         if filtered:
-                            yield ListView(*[NoteItem(n) for n in filtered], id="notes-lv")
+                            list_items: list[ListItem] = []
+                            if journals:
+                                list_items.append(_SectionHeader("Journal"))
+                                list_items.extend(NoteItem(n) for n in journals)
+                            if regular:
+                                list_items.append(_SectionHeader("Notes"))
+                                list_items.extend(NoteItem(n) for n in regular)
+                            yield ListView(*list_items, id="notes-lv")
                         else:
                             yield Static(
                                 "  No notes yet.\n  [dim]Press [bold]n[/bold] to create one.[/dim]",
@@ -529,16 +706,13 @@ class NotesPanel(Widget):
 
     # ─────────────────────────────────────────── events
 
+    def on_tabs_tab_activated(self, event: Tabs.TabActivated) -> None:
+        if event.tab is None:
+            return
+        self._mode = "journal" if event.tab.id == "tab-journal" else "notes"
+
     def on_filter_pill_pressed(self, event: FilterPill.Pressed) -> None:
         pid = event.pill.id or ""
-
-        # Mode toggle
-        if pid == "mode-journal":
-            self._mode = "journal"
-            return
-        if pid == "mode-notes":
-            self._mode = "notes"
-            return
 
         # Calendar context quick-open
         if pid in ("ctx-week", "ctx-month", "ctx-year"):
@@ -577,7 +751,10 @@ class NotesPanel(Widget):
             path = nd / f"{slug}.md"
             if path.exists():
                 post = frontmatter.load(str(path))
-                content = self._rendered_content(post.content)
+                content = (
+                    self._rendered_content(post.content)
+                    + self._backlinks_section(path)
+                )
                 title = post.metadata.get("title", path.stem)
                 self.query_one("#viewer-header", Static).update(f"  {title}")
                 self.query_one("#md", Markdown).update(content)
@@ -619,6 +796,21 @@ class NotesPanel(Widget):
                 subprocess.Popen(["xdg-open", href])
             except Exception:
                 self.notify("Could not open image — xdg-open not available.", severity="warning")
+            return
+
+        # date: link — navigate to journal note, auto-create if missing
+        if href.startswith("date:"):
+            slug = href[5:]
+            ntype = note_type(slug)
+            try:
+                nd = self._wm.notes_dir()
+                path = nd / f"{slug}.md"
+                if not path.exists():
+                    path = ensure_note(nd, slug, ntype)
+                    self.notify(f"Created {ntype} entry for {slug}", timeout=2)
+                self._navigate_to_note(path)
+            except Exception:
+                pass
             return
 
         if not href.startswith("note:"):
@@ -691,38 +883,19 @@ class NotesPanel(Widget):
             pass
 
     def _extract_note_todos(self, path: Path) -> None:
-        from src.data.note_todos import parse_note_todos, save_todo_tags
-        import uuid as _uuid
+        from src.data.note_todos import sync_note_todos
         try:
-            post = frontmatter.load(str(path))
-            parsed = parse_note_todos(post.content, path.stem)
-            if not parsed:
-                return
             store = self._wm.store()
-            existing_hashes = {
-                t["source_hash"] for t in store.all("todos") if t.get("source_hash")
-            }
-            now = datetime.now().isoformat()
-            new_count = 0
-            for todo in parsed:
-                if todo["source_hash"] in existing_hashes:
-                    continue
-                rec = store.insert("todos", {
-                    "id": str(_uuid.uuid4()),
-                    "text": todo["text"],
-                    "status": todo["status"],
-                    "due_date": todo["due_date"],
-                    "assignee": todo["assignee"],
-                    "note_ref": todo["note_ref"],
-                    "source_hash": todo["source_hash"],
-                    "created": now,
-                    "updated": now,
-                })
-                if todo["tags"]:
-                    save_todo_tags(store, rec["id"], todo["tags"])
-                new_count += 1
-            if new_count:
-                self.notify(f"Extracted {new_count} task(s) from '{path.stem}'.", timeout=4)
+            created, updated = sync_note_todos(store, path, path.stem)
+            parts: list[str] = []
+            if created:
+                parts.append(f"{created} new")
+            if updated:
+                parts.append(f"{updated} updated")
+            if parts:
+                self.notify(
+                    f"Synced {' · '.join(parts)} task(s) from '{path.stem}'.", timeout=4
+                )
         except Exception:
             pass
 
@@ -739,6 +912,41 @@ class NotesPanel(Widget):
             self.query_one("#md", Markdown).update(content)
         except Exception:
             pass
+
+    # ─────────────────────────────────────────── public API (called from search)
+
+    def navigate_to(self, path: Path) -> None:
+        """Switch to notes mode (if needed) and select a note in the list."""
+        if self._mode != "notes":
+            self._mode = "notes"  # triggers watch__mode → recompose
+            self.call_after_refresh(lambda: self._do_navigate_note(path))
+        else:
+            self._do_navigate_note(path)
+
+    def _do_navigate_note(self, path: Path) -> None:
+        try:
+            lv = self.query_one("#notes-lv", ListView)
+            for i, child in enumerate(lv.children):
+                if isinstance(child, NoteItem) and child.info.get("path") == path:
+                    lv.index = i
+                    lv.focus()
+                    self._selected_path = path
+                    rendered = self._rendered_content(child.info.get("content", ""))
+                    self.query_one("#md", Markdown).update(rendered)
+                    break
+        except Exception:
+            pass
+
+    def open_note(self, path: Path) -> None:
+        """Open $EDITOR for a specific note path (called from search edit action)."""
+        self._selected_path = path
+        editor = os.environ.get("EDITOR", "nano")
+        with self.app.suspend():
+            subprocess.call([editor, str(path)])
+        self._update_editedAt(path)
+        self._extract_note_todos(path)
+        self._refresh_preview()
+        self.refresh(recompose=True)
 
     def _clipboard_paste_image(self) -> bytes | None:
         if os.environ.get("WAYLAND_DISPLAY"):
@@ -762,9 +970,6 @@ class NotesPanel(Widget):
             pass
 
     # ─────────────────────────────────────────── actions
-
-    def action_toggle_mode(self) -> None:
-        self._mode = "notes" if self._mode == "journal" else "journal"
 
     def action_new_note(self) -> None:
         def cb(result: dict | None) -> None:

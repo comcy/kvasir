@@ -10,7 +10,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen
-from textual.widgets import Footer, Header, Input, RichLog, Static, TabbedContent, TabPane
+from textual.widgets import Footer, Header, Input, ListItem, ListView, RichLog, Static, TabbedContent, TabPane
 
 from src.workspace.manager import WorkspaceManager, WorkspaceError
 from src.tui.themes import THEMES, THEME_NAMES
@@ -21,6 +21,7 @@ from src.tui.widgets.session_panel import SessionPanel
 from src.tui.widgets.todo_manager import TodoManager
 from src.tui.widgets.notes_panel import NotesPanel
 from src.tui.widgets.search_panel import SearchPanel
+from src.tui.widgets.quick_capture import QuickCaptureBar
 
 APP_CSS = """
 Screen { background: $background; }
@@ -88,7 +89,7 @@ TabPane {
 
 ListItem { background: transparent; padding: 0 1; }
 ListItem:hover { background: $surface; }
-ListView:focus > ListItem.--highlight { background: $surface; }
+ListView:focus > ListItem.--highlight { background: $primary 20%; }
 
 DataTable { height: auto; background: transparent; }
 DataTable > .datatable--header { background: $surface; color: $primary; text-style: bold; }
@@ -107,16 +108,57 @@ Footer { height: 1; background: $surface; color: $foreground 70%; }
 """
 
 
+_CMD_SUGGESTIONS = [
+    "todo add \"Task text\"",
+    "todo add \"Task text\" --due 2026-07-01 --tags dev",
+    "todo list",
+    "todo list --status done",
+    "todo list --status all --tag dev",
+    "todo done <id>",
+    "todo delete <id>",
+    "note export <note.md>",
+    "note export <note.md> --pdf",
+    "note extract-todos <note.md>",
+    "note extract-todos <note.md> --dry-run",
+    "metric show",
+    "metric record <name> <value>",
+    "metric define <name> --label \"Label\" --type counter --agg daily",
+    "workspace list",
+    "workspace create <name>",
+    "workspace use <name>",
+    "today",
+    "summary",
+    "hooks install-hooks",
+]
+
+
+class _SuggestionItem(ListItem):
+    def __init__(self, cmd: str) -> None:
+        super().__init__()
+        self._cmd = cmd
+
+    def compose(self) -> ComposeResult:
+        yield Static(f"  [dim]›[/dim]  {self._cmd}")
+
+
 class CommandBarScreen(ModalScreen[None]):
-    """Quick command bar — type mimirlink subcommands and see output inline."""
+    """Quick command bar with auto-suggestions."""
 
     DEFAULT_CSS = """
     CommandBarScreen { align: center middle; }
     #cmd-dialog {
-        width: 84; height: 24;
+        width: 90; height: 30;
         background: $surface; border: round $secondary; padding: 1 2;
     }
     #cmd-title { color: $secondary; text-style: bold; margin-bottom: 1; }
+    #cmd-suggestions {
+        height: auto; max-height: 10;
+        border: solid $panel; margin-bottom: 1;
+        background: $background;
+    }
+    #cmd-suggestions ListItem  { background: transparent; padding: 0 1; }
+    #cmd-suggestions ListItem:hover { background: $surface; }
+    #cmd-suggestions ListView:focus > ListItem.--highlight { background: $primary 20%; }
     #cmd-output { height: 1fr; border: solid $panel; margin: 1 0; padding: 0 1; }
     #cmd-hint { color: $foreground 40%; }
     """
@@ -127,14 +169,33 @@ class CommandBarScreen(ModalScreen[None]):
         with Vertical(id="cmd-dialog"):
             yield Static("  mimirlink — command bar", id="cmd-title")
             yield Input(
-                placeholder="note export my-note.md  ·  todo list  ·  summary",
+                placeholder="type a command or pick a suggestion below…",
                 id="cmd-input",
             )
+            yield ListView(*[_SuggestionItem(c) for c in _CMD_SUGGESTIONS], id="cmd-suggestions")
             yield RichLog(id="cmd-output", markup=True, highlight=False)
-            yield Static("  [dim]Enter: run  ·  Escape: close[/dim]", id="cmd-hint")
+            yield Static(
+                "  [dim]Enter: run  ·  ↑↓ or Tab: suggestions  ·  Escape: close[/dim]",
+                id="cmd-hint",
+            )
 
     def on_mount(self) -> None:
         self.query_one("#cmd-input", Input).focus()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        q = event.value.strip().lower()
+        lv = self.query_one("#cmd-suggestions", ListView)
+        lv.clear()
+        matches = [c for c in _CMD_SUGGESTIONS if not q or q in c.lower()]
+        for cmd in matches:
+            lv.append(_SuggestionItem(cmd))
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        if isinstance(event.item, _SuggestionItem):
+            inp = self.query_one("#cmd-input", Input)
+            inp.value = event.item._cmd
+            inp.cursor_position = len(inp.value)
+            inp.focus()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         cmd_str = event.value.strip()
@@ -175,7 +236,7 @@ class DevTrackApp(App):
         Binding("3",      "switch_tab('tab-notes')",     "Notes"),
         Binding("4",      "switch_tab('tab-search')",    "Search"),
         Binding("/",      "open_search",        "Search",     show=False),
-        Binding("ctrl+p", "command_bar",        "Command bar"),
+        Binding("ctrl+p", "command_bar",        "Command bar", priority=True),
     ]
 
     _theme_idx: reactive[int] = reactive(0)
@@ -206,7 +267,7 @@ class DevTrackApp(App):
     # ---------------------------------------------------------------- compose
 
     def compose(self) -> ComposeResult:
-        todos, metrics, mv, commits, sessions, ws = self._load_dashboard()
+        _, metrics, mv, commits, sessions, ws = self._load_dashboard()
         today = date.today().isoformat()
         theme = THEME_NAMES[self._theme_idx % len(THEME_NAMES)]
 
@@ -221,10 +282,11 @@ class DevTrackApp(App):
         with TabbedContent(id="tabs", initial="tab-dashboard"):
             # ── 1 – Dashboard ─────────────────────────────────────────────────
             with TabPane("Dashboard [dim][1][/dim]", id="tab-dashboard"):
+                yield QuickCaptureBar(self._wm)
                 with Horizontal(id="dash-layout"):
                     with Vertical(id="dash-left"):
                         yield Static("  ○ TODOs",           classes="col-header")
-                        yield TodoPanel(todos)
+                        yield TodoPanel(self._wm)
                     with Vertical(id="dash-center"):
                         with Vertical(id="center-top"):
                             yield Static("  ◈ Metrics",     classes="col-header")
@@ -270,6 +332,69 @@ class DevTrackApp(App):
                 self.call_after_refresh(lambda: self.query_one("#search-box", Input).focus())
             except Exception:
                 pass
+        elif tab_id == "tab-dashboard":
+            try:
+                self.call_after_refresh(
+                    lambda: self.query_one(QuickCaptureBar).focus_input()
+                )
+            except Exception:
+                pass
+        elif tab_id == "tab-notes":
+            try:
+                self.call_after_refresh(
+                    lambda: self.query_one("#notes-lv", ListView).focus()
+                )
+            except Exception:
+                pass
+        elif tab_id == "tab-todos":
+            try:
+                self.call_after_refresh(
+                    lambda: self.query_one("#lv", ListView).focus()
+                )
+            except Exception:
+                pass
+
+    def on_search_panel_item_activated(self, event) -> None:
+        from pathlib import Path
+        from src.tui.widgets.search_panel import SearchPanel
+        result = event.result
+        action = event.action  # "navigate" | "edit"
+
+        if result.get("kind") == "todo":
+            todo_id  = result.get("_id", "")
+            todo     = result.get("_todo", {})
+            tags     = result.get("_tags", [])
+            self.action_switch_tab("tab-todos")
+            if action == "edit":
+                self.call_after_refresh(
+                    lambda: self.query_one(TodoManager).edit_todo_direct(todo, tags)
+                )
+            else:
+                self.call_after_refresh(
+                    lambda: self.query_one(TodoManager).navigate_to(todo_id)
+                )
+
+        elif result.get("kind") == "note":
+            path = Path(result["path"])
+            self.action_switch_tab("tab-notes")
+            if action == "edit":
+                self.call_after_refresh(
+                    lambda: self.query_one(NotesPanel).open_note(path)
+                )
+            else:
+                self.call_after_refresh(
+                    lambda: self.query_one(NotesPanel).navigate_to(path)
+                )
+
+    def on_quick_capture_bar_captured(self, event: QuickCaptureBar.Captured) -> None:
+        try:
+            self.query_one(NotesPanel).refresh(recompose=True)
+        except Exception:
+            pass
+        try:
+            self.query_one(TodoPanel).reload()
+        except Exception:
+            pass
 
     # ----------------------------------------------------------------- actions
 
