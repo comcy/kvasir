@@ -1,5 +1,8 @@
 # mimirlink
 
+- badge
+- image
+
 Local, offline-first developer workflow and journaling tool.
 Runs on Linux, macOS, and Windows — no internet connection required.
 
