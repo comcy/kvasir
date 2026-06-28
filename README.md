@@ -7,24 +7,42 @@ Tracks todos, notes, journal entries, metrics, work sessions, and commits. All d
 
 ---
 
-## Requirements
-
-- Python 3.11 or newer
-- `pip` or [`pipx`](https://pipx.pypa.io)
-
----
-
 ## Installation
 
-### As an end user
+### One-liner (recommended)
 
+**Linux / macOS**
 ```bash
-pip install .
-# or isolated via pipx:
-pipx install .
+curl -sSL https://comcy.github.io/kvasir/install.sh | bash
 ```
 
-The `mimirlink` command is then available globally.
+**Windows (PowerShell)**
+```powershell
+irm https://comcy.github.io/kvasir/install.ps1 | iex
+```
+
+Requires **Python 3.11+**. The installer fetches [uv](https://github.com/astral-sh/uv) automatically if not present, then builds mimirlink directly from GitHub — no package registry, no account.
+
+### Manual install (via uv or pipx)
+
+```bash
+# uv (recommended)
+uv tool install "git+https://github.com/comcy/kvasir.git"
+
+# pipx
+pipx install "git+https://github.com/comcy/kvasir.git"
+```
+
+**With PDF export support** (requires system libs: Cairo, Pango):
+```bash
+uv tool install "git+https://github.com/comcy/kvasir.git" --extra pdf
+```
+
+**Manage the installation:**
+```bash
+uv tool upgrade mimirlink      # update to latest
+uv tool uninstall mimirlink    # remove
+```
 
 ### First-time setup
 
@@ -451,6 +469,8 @@ source .venv/bin/activate          # Linux / macOS
 
 ```bash
 pip install -e .
+# with PDF export support:
+pip install -e ".[pdf]"
 ```
 
 Changes in `src/` take effect immediately without reinstalling.
@@ -458,7 +478,7 @@ Changes in `src/` take effect immediately without reinstalling.
 ### 3. Linting
 
 ```bash
-pip install ruff
+pip install -e ".[dev]"
 ruff check .
 ruff format .
 ```

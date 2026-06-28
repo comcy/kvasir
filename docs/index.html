@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mimirlink — offline-first developer workflow tool</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #1e1e2e;
+      --surface: #313244;
+      --border:  #45475a;
+      --fg:      #cdd6f4;
+      --muted:   #6c7086;
+      --primary: #cba6f7;
+      --accent:  #89dceb;
+      --green:   #a6e3a1;
+      --yellow:  #f9e2af;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      line-height: 1.6;
+      padding: 2rem 1rem;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    header { margin-bottom: 3rem; }
+    h1 { font-size: 2.4rem; color: var(--primary); font-weight: 700; }
+    .tagline { color: var(--muted); font-size: 1.1rem; margin-top: .4rem; }
+
+    .badges { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: 1.2rem; }
+    .badge {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: .2rem .8rem;
+      font-size: .78rem;
+      color: var(--accent);
+    }
+
+    section { margin-bottom: 2.8rem; }
+    h2 {
+      font-size: 1.15rem;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: .4rem;
+    }
+
+    .install-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.2rem 1.4rem;
+      margin-bottom: 1rem;
+    }
+    .install-label {
+      font-size: .78rem;
+      color: var(--muted);
+      margin-bottom: .5rem;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+    .os-icon { font-size: 1rem; }
+
+    pre {
+      background: var(--bg);
+      border-radius: 6px;
+      padding: .7rem 1rem;
+      overflow-x: auto;
+      font-size: .9rem;
+      font-family: "Cascadia Code", "Fira Code", "Menlo", monospace;
+    }
+    code { color: var(--green); }
+
+    .copy-btn {
+      float: right;
+      margin-left: 1rem;
+      background: var(--border);
+      color: var(--fg);
+      border: none;
+      border-radius: 4px;
+      padding: .15rem .6rem;
+      font-size: .75rem;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .copy-btn:hover { background: var(--primary); color: var(--bg); }
+    .copy-btn.copied { background: var(--green); color: var(--bg); }
+
+    .note {
+      color: var(--muted);
+      font-size: .85rem;
+      margin-top: .5rem;
+    }
+
+    ul { list-style: none; padding: 0; }
+    ul li::before { content: "▸ "; color: var(--accent); }
+    ul li { margin-bottom: .3rem; }
+
+    .features { display: grid; grid-template-columns: 1fr 1fr; gap: .3rem; }
+    @media (max-width: 560px) { .features { grid-template-columns: 1fr; } }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding-top: 1.2rem;
+      color: var(--muted);
+      font-size: .82rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>mimirlink</h1>
+  <p class="tagline">Offline-first developer workflow &amp; journaling tool — terminal native.</p>
+  <div class="badges">
+    <span class="badge">Python 3.11+</span>
+    <span class="badge">Linux · macOS · Windows</span>
+    <span class="badge">No internet required</span>
+    <span class="badge">Plain files (NDJSON + Markdown)</span>
+  </div>
+</header>
+
+<section>
+  <h2>Install</h2>
+
+  <div class="install-block">
+    <div class="install-label">
+      <span class="os-icon">🐧</span> Linux &amp; macOS
+    </div>
+    <pre><button class="copy-btn" onclick="copy(this,'curl -sSL https://comcy.github.io/kvasir/install.sh | bash')">Copy</button><code>curl -sSL https://comcy.github.io/kvasir/install.sh | bash</code></pre>
+  </div>
+
+  <div class="install-block">
+    <div class="install-label">
+      <span class="os-icon">🪟</span> Windows — PowerShell
+    </div>
+    <pre><button class="copy-btn" onclick="copy(this,'irm https://comcy.github.io/kvasir/install.ps1 | iex')">Copy</button><code>irm https://comcy.github.io/kvasir/install.ps1 | iex</code></pre>
+  </div>
+
+  <p class="note">
+    Requires <strong>Python 3.11+</strong>.
+    The installer installs <a href="https://github.com/astral-sh/uv">uv</a> automatically if not present,
+    then builds mimirlink from source. No account or package registry needed.
+  </p>
+</section>
+
+<section>
+  <h2>Quick start</h2>
+  <pre><code>mimirlink workspace create private   # set up your first workspace
+mimirlink tui                        # launch the terminal UI
+mimirlink --help                     # full command reference</code></pre>
+</section>
+
+<section>
+  <h2>What it does</h2>
+  <ul class="features">
+    <li>Bullet-journal TUI with calendar navigation</li>
+    <li>Todo manager with priorities, tags &amp; due dates</li>
+    <li>Full-text search across notes and todos</li>
+    <li>Bidirectional sync between Markdown checkboxes and todos</li>
+    <li>Work session tracking (git hook based)</li>
+    <li>Conventional Commits validator + recorder</li>
+    <li>Custom metrics (manual + auto from sessions/commits)</li>
+    <li>Live query blocks inside Markdown notes</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Advanced install options</h2>
+  <pre><code># With PDF export support (needs system libs: Cairo, Pango)
+uv tool install "git+https://github.com/comcy/kvasir.git" --extra pdf
+
+# Install a specific commit or branch
+uv tool install "git+https://github.com/comcy/kvasir.git@main"
+
+# Update to latest
+uv tool upgrade mimirlink
+
+# Uninstall
+uv tool uninstall mimirlink</code></pre>
+</section>
+
+<footer>
+  <a href="https://github.com/comcy/kvasir">GitHub</a> ·
+  Source on GitHub — all data stored locally as plain Markdown and NDJSON.
+</footer>
+
+<script>
+function copy(btn, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = "Copied!";
+    btn.classList.add("copied");
+    setTimeout(() => { btn.textContent = "Copy"; btn.classList.remove("copied"); }, 2000);
+  });
+}
+</script>
+</body>
+</html>

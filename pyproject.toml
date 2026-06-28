@@ -17,9 +17,12 @@ dependencies = [
     "watchdog>=4",
     "apscheduler>=3.10",
     "plyer>=2",
-    "weasyprint>=60",
     "tomli>=2; python_version < '3.11'",
 ]
+
+[project.optional-dependencies]
+pdf = ["weasyprint>=60"]
+dev = ["ruff"]
 
 [project.scripts]
 mimirlink = "src.cli.main:app"
