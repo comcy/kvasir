@@ -382,6 +382,14 @@ mimirlink hooks install-hooks --force   # overwrite existing hooks
 |------|---------|--------|
 | `commit-msg` | Before commit is saved | Validates Conventional Commits — soft-warn + `[y/N]` if invalid |
 | `post-commit` | After every commit | Parses commit and appends to `commits.ndjson` |
+| `post-checkout` | Branch switch / worktree add | Session tracking, WIP resumption (last session + uncommitted files), stale-branch warning |
+
+The hooks directory is resolved via `git rev-parse --git-path hooks`, so installation works in plain repos, worktrees, and the bare `.bare/` project layout alike. The stale-branch threshold defaults to 14 days and can be overridden per repo in `.mimirlink.toml`:
+
+```toml
+[git]
+stale_days = 30
+```
 
 **Conventional Commits format:**
 
@@ -398,6 +406,99 @@ Valid types: `feat` · `fix` · `docs` · `style` · `refactor` · `perf` · `te
 Non-conventional commits trigger a warning but are allowed after confirmation. They are recorded as `type: wip`.
 
 If `mimirlink` is not in PATH when git runs the hook, the hook exits silently without blocking the commit.
+
+---
+
+## Projects & Worktrees
+
+A **project** is a named, registered repo path in the active workspace — every workspace context (private or work) has its own projects, stored in `projects.ndjson`.
+
+### Clone with the bare-repo worktree layout
+
+```bash
+mimirlink project clone git@github.com:me/myproject.git
+```
+
+creates:
+
+```
+myproject/
+  .bare/          # bare clone (the single object database)
+  .git            # file: "gitdir: ./.bare" — the folder itself acts as the repo
+  main/           # worktree for the default branch (plain subfolder)
+```
+
+No working checkout is needed before adding worktrees — each branch simply becomes a sibling folder. The clone also fixes the fetch refspec (bare clones don't track remote branches by default), installs the mimirlink git hooks, and registers the project.
+
+### Manage projects
+
+```bash
+mimirlink project add myproject          # register an existing repo (cwd)
+mimirlink project add tools --path ~/dev/tools
+mimirlink project list                   # name, path, remote, worktrees, active session
+mimirlink project remove myproject       # unregister only — files are never deleted
+```
+
+### Manage worktrees (inside a project)
+
+```bash
+mimirlink wt add feat/login              # folder feat-login/, branch created if missing
+mimirlink wt add hotfix --from origin/main
+mimirlink wt list                        # folder, branch, uncommitted count, session, stale marker
+mimirlink wt remove feat-login           # closes the session; branch is kept
+mimirlink wt remove feat-login --force   # even with uncommitted changes
+```
+
+`wt` is an alias for `worktree` — both work.
+
+### Automatic session tracking
+
+With the hooks installed, every branch switch or `wt add` opens a **session** (`sessions.ndjson`: repo, branch, `worktree_path`, start, end). Parallel worktrees have parallel sessions; switching branches inside one worktree closes its previous session. On every checkout mimirlink prints WIP-resumption context — when you last worked on the branch and which files are uncommitted — plus a warning for stale branches. Sessions and worktree status appear in the TUI dashboard's *Sessions / WIP* panel.
+
+### Typical workflow
+
+**Once per repo** — clone it as a project (or register an existing checkout):
+
+```bash
+cd ~/dev
+mimirlink project clone git@github.com:me/myproject.git
+cd myproject
+```
+
+**Per feature/fix** — one worktree per branch, work happens in plain folders:
+
+```bash
+mimirlink wt add feat/login        # creates feat-login/, opens a session
+cd feat-login
+# ... edit, commit as usual — hooks validate messages and track sessions ...
+```
+
+Because every branch is its own folder, switching tasks is just `cd ../hotfix-123` — no stashing, no checkout dance, and each worktree keeps its own uncommitted state. A `git checkout` *inside* a worktree still works normally; the post-checkout hook closes the old session, opens a new one, and reminds you what was in progress:
+
+```
+mimirlink: last session on feat/login: 2026-07-09 22:26
+mimirlink: 1 uncommitted file(s)
+    ?? wip.txt
+mimirlink: 1 stale branch(es) (no commits for >14d):
+    old-feature — 69d
+```
+
+**Staying oriented:**
+
+```bash
+mimirlink wt list                  # where is WIP? which session is running? what's stale?
+mimirlink project list             # all projects of the current workspace
+mimirlink today                    # today's sessions and open todos
+```
+
+**When the branch is merged:**
+
+```bash
+cd ..                              # leave the worktree before removing it
+mimirlink wt remove feat-login     # closes the session, keeps the branch
+```
+
+The `morning` routine complements this: overdue-todo triage first, then straight into the right worktree with full WIP context.
 
 ---
 

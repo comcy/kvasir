@@ -35,6 +35,7 @@ exit 0
 _HOOKS = {
     "commit-msg": "commit-msg",
     "post-commit": "post-commit",
+    "post-checkout": "post-checkout",
 }
 
 
@@ -51,11 +52,17 @@ def install_hooks(
 ) -> None:
     """Install mimirlink git hooks into a git repository."""
     repo = repo.resolve()
-    hooks_dir = repo / ".git" / "hooks"
-
-    if not hooks_dir.exists():
+    # Resolve via git so worktrees and the bare .bare/-layout work too
+    # (there the hooks dir lives in the common dir, not literally .git/hooks).
+    try:
+        hooks_dir = Path(subprocess.check_output(
+            ["git", "rev-parse", "--path-format=absolute", "--git-path", "hooks"],
+            cwd=str(repo), stderr=subprocess.DEVNULL,
+        ).decode().strip())
+    except (subprocess.CalledProcessError, FileNotFoundError):
         console.print(f"[red]Not a git repository: {repo}[/red]")
         raise typer.Exit(1)
+    hooks_dir.mkdir(parents=True, exist_ok=True)
 
     installed: list[str] = []
     skipped: list[str] = []
@@ -79,7 +86,11 @@ def install_hooks(
         dest.write_text(script)
         dest.chmod(dest.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         installed.append(hook_name)
-        console.print(f"[green]Installed[/green] {dest.relative_to(repo)}")
+        try:
+            shown = dest.relative_to(repo)
+        except ValueError:
+            shown = dest
+        console.print(f"[green]Installed[/green] {shown}")
 
     if installed:
         console.print(f"\n[dim]Hooks active in:[/dim] {repo}")
@@ -179,3 +190,71 @@ def _run_post_commit() -> None:
         pass  # never block the workflow on NDJSON write errors
 
     raise typer.Exit(0)
+
+
+# ── internal: post-checkout ───────────────────────────────────────────────────
+
+@hook_app.command("post-checkout")
+def _run_post_checkout(
+    prev_head: str = typer.Argument(...),
+    new_head: str = typer.Argument(...),
+    flag: str = typer.Argument(...),
+) -> None:
+    """Session tracking, WIP resumption, stale-branch warning. Called by git hook."""
+    if flag != "1":  # file checkout, not a branch switch
+        raise typer.Exit(0)
+
+    try:
+        _post_checkout_impl()
+    except Exception:
+        pass  # a hook must never block git
+    raise typer.Exit(0)
+
+
+def _post_checkout_impl() -> None:
+    from src.data.sessions import (
+        last_session,
+        open_session,
+        repo_id,
+        stale_branches,
+        stale_threshold,
+    )
+    from src.workspace.manager import WorkspaceManager
+
+    branch = subprocess.check_output(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"], stderr=subprocess.DEVNULL
+    ).decode().strip()
+    if branch == "HEAD":  # detached
+        return
+    toplevel = subprocess.check_output(
+        ["git", "rev-parse", "--show-toplevel"], stderr=subprocess.DEVNULL
+    ).decode().strip()
+
+    repo = repo_id(toplevel)
+    store = WorkspaceManager().store()
+
+    # WIP resumption: when was this branch last worked on, what is uncommitted?
+    prev = last_session(store, repo, branch)
+    if prev and prev.get("start"):
+        ts = prev["start"][:16].replace("T", " ")
+        console.print(f"[dim]mimirlink:[/dim] last session on [bold]{branch}[/bold]: {ts}")
+    status = subprocess.check_output(
+        ["git", "status", "--short"], stderr=subprocess.DEVNULL
+    ).decode().rstrip()
+    if status:
+        lines = status.splitlines()
+        console.print(f"[dim]mimirlink:[/dim] [yellow]{len(lines)} uncommitted file(s)[/yellow]")
+        for line in lines[:5]:
+            console.print(f"    [dim]{line}[/dim]")
+
+    open_session(store, repo, branch, toplevel)
+
+    stale = stale_branches(toplevel, stale_threshold(toplevel))
+    stale = [(b, d) for b, d in stale if b != branch]
+    if stale:
+        console.print(
+            f"[dim]mimirlink:[/dim] [yellow]{len(stale)} stale branch(es)[/yellow] "
+            f"(no commits for >{stale_threshold(toplevel)}d):"
+        )
+        for name, days in stale[:5]:
+            console.print(f"    [dim]{name} — {days}d[/dim]")

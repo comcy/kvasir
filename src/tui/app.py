@@ -127,6 +127,12 @@ _CMD_SUGGESTIONS = [
     "workspace list",
     "workspace create <name>",
     "workspace use <name>",
+    "project list",
+    "project add <name>",
+    "project clone <url>",
+    "wt list",
+    "wt add <branch>",
+    "wt remove <folder>",
     "today",
     "summary",
     "hooks install-hooks",
@@ -269,7 +275,7 @@ class DevTrackApp(App):
     # ---------------------------------------------------------------- compose
 
     def compose(self) -> ComposeResult:
-        _, metrics, mv, commits, sessions, ws = self._load_dashboard()
+        _, metrics, mv, commits, _sessions, ws = self._load_dashboard()
         today = date.today().isoformat()
         theme = THEME_NAMES[self._theme_idx % len(THEME_NAMES)]
 
@@ -298,7 +304,7 @@ class DevTrackApp(App):
                             yield CommitPanel(commits)
                     with Vertical(id="dash-right"):
                         yield Static("  ⏱ Sessions / WIP",  classes="col-header")
-                        yield SessionPanel(sessions)
+                        yield SessionPanel(self._wm)
 
             # ── 2 – TODOs ─────────────────────────────────────────────────────
             with TabPane("TODOs [dim][2][/dim]", id="tab-todos"):

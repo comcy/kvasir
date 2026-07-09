@@ -1,0 +1,171 @@
+"""Worktree commands: add/list/remove worktrees inside a project."""
+from __future__ import annotations
+
+import subprocess
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+import typer
+from rich.console import Console
+from rich.table import Table
+
+from src.workspace.manager import WorkspaceError, WorkspaceManager
+
+app = typer.Typer(help="Manage git worktrees inside a project.")
+console = Console()
+
+
+def _duration(start: str, end: str | None) -> str:
+    try:
+        s = datetime.fromisoformat(start)
+        e = datetime.fromisoformat(end) if end else datetime.now()
+        h, rem = divmod(int((e - s).total_seconds()), 3600)
+        m = rem // 60
+        return f"{h}h {m:02d}m" if h else f"{m}m"
+    except Exception:
+        return "?"
+
+
+def _require_root() -> Path:
+    from src.data.projects import project_root
+
+    root = project_root(Path.cwd())
+    if root is None:
+        console.print("[red]Not inside a project (no git repo found from cwd).[/red]")
+        raise typer.Exit(1)
+    return root
+
+
+def _branch_exists(root: Path, branch: str) -> bool:
+    return subprocess.run(
+        ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"],
+        cwd=str(root),
+    ).returncode == 0
+
+
+@app.command("add")
+def add(
+    branch: str = typer.Argument(..., help="Branch to check out (created if missing)"),
+    from_ref: Optional[str] = typer.Option(None, "--from", "-f", help="Start point for a new branch (default: current HEAD)"),
+) -> None:
+    """Create a worktree folder for BRANCH inside the current project."""
+    from src.data.sessions import last_session, open_session, repo_id
+
+    root = _require_root()
+    dirname = branch.replace("/", "-")
+    dest = root / dirname
+    if dest.exists():
+        console.print(f"[red]Directory already exists: {dest}[/red]")
+        raise typer.Exit(1)
+
+    if _branch_exists(root, branch):
+        cmd = ["git", "worktree", "add", str(dest), branch]
+    else:
+        cmd = ["git", "worktree", "add", "-b", branch, str(dest)]
+        if from_ref:
+            cmd.append(from_ref)
+
+    try:
+        subprocess.run(cmd, cwd=str(root), check=True)
+    except subprocess.CalledProcessError:
+        console.print("[red]git worktree add failed.[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"[green]Worktree[/green] {dest}  [dim]({branch})[/dim]")
+
+    try:
+        store = WorkspaceManager().store()
+        repo = repo_id(dest)
+        prev = last_session(store, repo, branch)
+        if prev and prev.get("start"):
+            ts = prev["start"][:16].replace("T", " ")
+            console.print(f"[dim]Last session on this branch: {ts}[/dim]")
+        open_session(store, repo, branch, str(dest))
+    except (WorkspaceError, Exception):
+        pass  # session tracking must not fail the worktree operation
+
+
+@app.command("list")
+def list_worktrees_cmd() -> None:
+    """List worktrees of the current project with WIP and session status."""
+    from src.data.projects import list_worktrees, uncommitted_count
+    from src.data.sessions import stale_branches, stale_threshold
+
+    root = _require_root()
+    worktrees = list_worktrees(root)
+    if not worktrees:
+        console.print("[dim]No worktrees found.[/dim]")
+        return
+
+    sessions: list[dict] = []
+    try:
+        sessions = WorkspaceManager().store().all("sessions")
+    except (WorkspaceError, Exception):
+        pass
+
+    stale = dict(stale_branches(root, stale_threshold(root)))
+
+    table = Table(show_header=True, header_style="bold")
+    table.add_column("Folder")
+    table.add_column("Branch")
+    table.add_column("Uncommitted", justify="right")
+    table.add_column("Session")
+    table.add_column("", width=10)
+
+    for w in worktrees:
+        wt_path = w["path"]
+        branch = w["branch"] or "[dim](detached)[/dim]"
+        n = uncommitted_count(wt_path)
+        wip = f"[yellow]{n}[/yellow]" if n else "[dim]0[/dim]"
+
+        wt_sessions = [s for s in sessions if s.get("worktree_path") == wt_path]
+        active = [s for s in wt_sessions if not s.get("end")]
+        if active:
+            sess = f"[green]● {_duration(active[0].get('start', ''), None)}[/green]"
+        elif wt_sessions:
+            latest = max(wt_sessions, key=lambda s: s.get("start", ""))
+            sess = f"[dim]{latest.get('start', '')[:16].replace('T', ' ')}[/dim]"
+        else:
+            sess = "[dim]—[/dim]"
+
+        marker = f"[red]stale {stale[w['branch']]}d[/red]" if w["branch"] in stale else ""
+        table.add_row(Path(wt_path).name, branch, wip, sess, marker)
+
+    console.print(table)
+
+
+@app.command("remove")
+def remove(
+    target: str = typer.Argument(..., help="Worktree folder name or branch"),
+    force: bool = typer.Option(False, "--force", help="Remove even with uncommitted changes"),
+) -> None:
+    """Remove a worktree and close its session. The branch itself is kept."""
+    from src.data.projects import list_worktrees
+    from src.data.sessions import close_session_for_worktree
+
+    root = _require_root()
+    match = next(
+        (w for w in list_worktrees(root)
+         if Path(w["path"]).name == target or w["branch"] == target),
+        None,
+    )
+    if match is None:
+        console.print(f"[red]No worktree matching '{target}'.[/red]")
+        raise typer.Exit(1)
+
+    cmd = ["git", "worktree", "remove", match["path"]]
+    if force:
+        cmd.insert(3, "--force")
+    try:
+        subprocess.run(cmd, cwd=str(root), check=True)
+    except subprocess.CalledProcessError:
+        console.print("[red]git worktree remove failed[/red] [dim](uncommitted changes? use --force)[/dim]")
+        raise typer.Exit(1)
+
+    try:
+        close_session_for_worktree(WorkspaceManager().store(), match["path"])
+    except (WorkspaceError, Exception):
+        pass
+
+    console.print(f"[yellow]Removed[/yellow] {match['path']}  [dim](branch '{match['branch']}' kept)[/dim]")

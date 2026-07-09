@@ -63,6 +63,16 @@ class Session:
     branch: str
     start: str
     end: str | None = None
+    worktree_path: str = ""
+
+
+@dataclass
+class Project:
+    id: str
+    name: str
+    path: str
+    remote: str = ""
+    created: str = field(default_factory=lambda: datetime.now().isoformat())
 
 
 @dataclass

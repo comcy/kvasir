@@ -9,6 +9,8 @@ from .todo_cmd import app as todo_app
 from .metric_cmd import app as metric_app
 from .hooks_cmd import app as hooks_app, hook_app
 from .note_cmd import app as note_app
+from .project_cmd import app as project_app
+from .worktree_cmd import app as worktree_app
 
 console = Console()
 app = typer.Typer(
@@ -23,6 +25,9 @@ app.add_typer(metric_app, name="metric")
 app.add_typer(hooks_app, name="hooks")
 app.add_typer(hook_app, name="hook")
 app.add_typer(note_app, name="note")
+app.add_typer(project_app, name="project")
+app.add_typer(worktree_app, name="worktree")
+app.add_typer(worktree_app, name="wt", hidden=True)
 
 
 @app.command()

@@ -55,6 +55,31 @@ Vorteil: erprobte Sync-Software, wasserdichte Trennung, NDJSON/Markdown sind mer
 
 ---
 
+## 2b. Projekte & Worktrees (Bare-Repo-Layout)
+
+**Ein Projekt = benannter, registrierter Repo-Pfad innerhalb eines Workspace** (`projects.ndjson`). Projekte gibt es in jedem Workspace-Kontext (privat wie geschäftlich).
+
+**Empfohlenes Layout (von `mimirlink project clone` erzeugt):**
+
+```
+myproject/
+  .bare/          # git clone --bare
+  .git            # Datei: "gitdir: ./.bare" — Ordner wirkt selbst als Repo
+  main/           # Worktree = einfacher Unterordner
+  feat-x/         # Worktree
+```
+
+Vorteile: kein „Arbeits-Checkout" nötig bevor Worktrees angelegt werden können; Branches liegen als parallele Ordner nebeneinander; `.bare` hält die gesamte Objektdatenbank einmal.
+
+**Befehle:**
+- `mimirlink project clone <url> [name]` — Bare-Clone + `.git`-Datei + Fetch-Refspec-Fix + Default-Branch-Worktree + Hook-Installation + Registrierung.
+- `mimirlink project add <name>` — bestehendes Repo registrieren (Files bleiben unberührt).
+- `mimirlink wt add <branch>` / `wt list` / `wt remove` — Worktrees verwalten; Sessions werden automatisch geöffnet/geschlossen.
+
+**Session-Tracking** läuft über den `post-checkout`-Hook: Branch-Wechsel im selben Worktree schließt die alte Session und öffnet eine neue; parallele Worktrees haben parallele Sessions (Identifier: `worktree_path`). Der Hook zeigt zusätzlich WIP-Resumption (letzte Session + uncommittete Dateien) und Stale-Branch-Warnungen (Schwelle: `[git] stale_days` in `.mimirlink.toml`, Default 14 Tage).
+
+---
+
 ## 3. Datenmodell (NDJSON-„Tabellen")
 
 Jede „Tabelle" ist eine NDJSON-Datei: eine JSON-Zeile pro Datensatz.
@@ -70,7 +95,8 @@ n:m-Beziehungen über separate Mapping-Dateien.
 | `metrics.ndjson` | Metrik-Definitionen (siehe unten) |
 | `metric_values.ndjson` | Zeitreihen-Werte: metric_id, timestamp, value |
 | `commits.ndjson` | Nur Main/Master-Commits für Changelogs: hash, typ, scope, subject, breaking, date |
-| `sessions.ndjson` | Branch-Sessions: repo, branch, start, end |
+| `sessions.ndjson` | Branch-Sessions: repo, branch, worktree_path, start, end |
+| `projects.ndjson` | Registrierte Projekte: name, path, remote |
 | `links.ndjson` | Verlinkungen zwischen Notizen/Entitäten |
 
 **Relationen in Python:** Beim Befehl werden die relevanten NDJSON-Dateien geladen, Mappings als `dict`-Lookups aufgelöst. Beim Löschen einer Entität müssen Mapping-Einträge selbst aufgeräumt werden (Konsistenz-Logik im Core).
@@ -196,9 +222,9 @@ metrics:
 
 ---
 
-## 10. Offene Frage (vor Bau-Start zu klären)
+## 10. Offene Frage — geklärt
 
-**Workspace-Granularität:** Soll ein Workspace **mehrere Projekte/Repos** umfassen (z. B. `work` = Monorepo + kleine Tools), oder ein Workspace pro Projekt? Das bestimmt, ob „Repo" eine Ebene **unter** dem Workspace ist oder ob Workspace = Projekt.
+**Workspace-Granularität:** Ein Workspace umfasst **mehrere Projekte** (siehe 2b). Workspace = Kontextgrenze (privat/geschäftlich), Projekt = registriertes Repo mit Pfad, Repo = zur Laufzeit erkannte Identität (Remote-URL). „Repo" liegt damit eine Ebene unter dem Workspace.
 
 ---
 

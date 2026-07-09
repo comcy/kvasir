@@ -24,8 +24,27 @@ Repos are not configured manually — they are discovered at runtime from the cu
 
 ---
 
+### Project
+A named, registered repo path within a Workspace (`projects.ndjson`). Every Workspace context has Projects — `private` as well as `work`. A Project is registered explicitly via `mimirlink project add` or created via `mimirlink project clone`, which sets up the **bare-repo worktree layout**:
+
+```
+<project>/
+  .bare/          # git clone --bare
+  .git            # file: "gitdir: ./.bare" — makes the folder act as the repo
+  main/           # worktree (plain subfolder)
+  feat-x/         # worktree
+```
+
+A Project differs from a Repo: the Repo is the runtime-discovered identity (remote URL), the Project is the registered local instance with a path and a user-chosen name. `mimirlink project remove` only unregisters — it never deletes files.
+
+**Avoid:** "workspace", "repo alias" when referring to a Project.
+
+---
+
 ### Worktree
 A Git worktree path. The primary identifier for a Session when multiple branches of the same repo are active simultaneously. Each worktree has its own `.git` link and can hold an independent Session.
+
+Managed via `mimirlink wt add|list|remove` (alias: `worktree`) inside a Project. `wt add feat/x` creates the folder `feat-x/`, checks out (or creates) the branch, and opens a Session. `wt remove` closes the Session and keeps the branch.
 
 ---
 
@@ -49,10 +68,11 @@ A Conventional Commit scope (e.g. `auth`, `billing`, `web`). Defined in `.mimirl
 ---
 
 ### Hook
-A shell script installed by `mimirlink install-hooks` into a specific Git repo's `.git/hooks/` directory. Two hooks:
+A shell script installed by `mimirlink install-hooks` into a Git repo's hooks directory (resolved via `git rev-parse --git-path hooks`, so worktrees and the bare `.bare/` layout work too). Three hooks:
 
-- `post-checkout` — fires on branch switch and `git worktree` operations. Handles: Session tracking, WIP resumption output, Stale Branch warnings.
-- `commit-msg` — fires after the commit message is written. Handles: Conventional Commit format validation (soft-warn), auto-entry into `commits.ndjson`.
+- `post-checkout` — fires on branch switch and `git worktree` operations. Handles: Session tracking, WIP resumption output, Stale Branch warnings. Never blocks git.
+- `commit-msg` — fires after the commit message is written. Handles: Conventional Commit format validation (soft-warn).
+- `post-commit` — fires after a commit is created. Handles: auto-entry into `commits.ndjson`.
 
 ---
 
