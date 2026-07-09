@@ -22,6 +22,7 @@ from src.tui.widgets.todo_manager import TodoManager
 from src.tui.widgets.notes_panel import NotesPanel
 from src.tui.widgets.search_panel import SearchPanel
 from src.tui.widgets.quick_capture import QuickCaptureBar
+from src.tui.screens.morning_wizard import MorningWizardScreen
 
 APP_CSS = """
 Screen { background: $background; }
@@ -231,6 +232,7 @@ class DevTrackApp(App):
         Binding("q",      "quit",              "Quit",        priority=True),
         Binding("t",      "next_theme",         "Theme"),
         Binding("r",      "reload_dashboard",   "Reload"),
+        Binding("m",      "morning_routine",    "Morning"),
         Binding("1",      "switch_tab('tab-dashboard')", "Dashboard"),
         Binding("2",      "switch_tab('tab-todos')",     "TODOs"),
         Binding("3",      "switch_tab('tab-notes')",     "Notes"),
@@ -275,7 +277,7 @@ class DevTrackApp(App):
         yield Static(
             f"  workspace: [bold]{ws}[/bold]  ·  {today}"
             f"  ·  theme: [italic]{theme}[/italic]"
-            f"  ·  [dim]1-4=tabs  t=theme  /=search  ctrl+p=cmd  q=quit[/dim]",
+            f"  ·  [dim]1-4=tabs  t=theme  /=search  m=morning  ctrl+p=cmd  q=quit[/dim]",
             id="workspace-bar",
         )
 
@@ -423,6 +425,25 @@ class DevTrackApp(App):
     def action_command_bar(self) -> None:
         self.push_screen(CommandBarScreen())
 
+    def action_morning_routine(self) -> None:
+        try:
+            self._wm.active()
+        except WorkspaceError:
+            self.notify("No active workspace.", severity="error")
+            return
+
+        def cb(_: None) -> None:
+            try:
+                self.query_one(TodoPanel).reload()
+            except Exception:
+                pass
+            try:
+                self.query_one(NotesPanel).refresh(recompose=True)
+            except Exception:
+                pass
+
+        self.push_screen(MorningWizardScreen(self._wm), cb)
+
     def _update_bar(self) -> None:
         try:
             ws = self._wm.active().name
@@ -433,5 +454,5 @@ class DevTrackApp(App):
         self.query_one("#workspace-bar", Static).update(
             f"  workspace: [bold]{ws}[/bold]  ·  {today}"
             f"  ·  theme: [italic]{theme}[/italic]"
-            f"  ·  [dim]1-4=tabs  t=theme  /=search  ctrl+p=cmd  q=quit[/dim]"
+            f"  ·  [dim]1-4=tabs  t=theme  /=search  m=morning  ctrl+p=cmd  q=quit[/dim]"
         )

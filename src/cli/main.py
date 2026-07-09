@@ -67,6 +67,17 @@ def today() -> None:
 
 
 @app.command()
+def morning(
+    lookback: int = typer.Option(7, "--lookback", "-l", help="Days to check for missing journal entries"),
+) -> None:
+    """Morning routine: triage due/overdue todos, fill journal gaps, plan today."""
+    from src.workspace.manager import WorkspaceManager
+    from src.cli.morning_cmd import run_morning
+
+    run_morning(console, WorkspaceManager(), lookback)
+
+
+@app.command()
 def summary() -> None:
     """Weekly summary: todos done, commits, metric values."""
     from src.workspace.manager import WorkspaceManager

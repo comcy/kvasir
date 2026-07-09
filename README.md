@@ -87,6 +87,7 @@ Available themes: `dracula` · `nord` · `tokyo-night` · `gruvbox` · `catppucc
 | `4` | Search tab |
 | `t` | Cycle theme |
 | `r` | Reload dashboard |
+| `m` | Morning routine (todo triage, journal gap-fill, plan today) |
 | `/` | Jump to search |
 | `ctrl+p` | Command bar (run any `mimirlink` subcommand inline) |
 | `q` | Quit |
@@ -203,7 +204,7 @@ Files are auto-detected by name — no manual tagging required. New journal note
 | **Year** | 12 month headings `## Januar · 2026-01` … `## Dezember · 2026-12` |
 | **Month** | Table `\| KW \| Tag \| Privat \| Geschäftlich \|` with all days; week number on Mondays; German weekday abbreviations (Mo/Di/Mi/Do/Fr/Sa/So) |
 | **Week** | 7 day headings `## Mo — 2026-06-22` … `## So — 2026-06-28` |
-| **Day** | `## Log` and `## Aufgaben` sections |
+| **Day** | `## Plan`, `## Log`, and `## Aufgaben` sections |
 
 Date strings inside templates (e.g. `2026-06-28`) are auto-linked in the preview panel — click them to navigate to that day's journal entry.
 
@@ -301,6 +302,7 @@ Embed live data from your workspace inside a note:
 type: todo
 status: open
 tags: [billing]
+due_date: 2026-07-08
 sort: due_date
 limit: 10
 ```
@@ -308,11 +310,16 @@ limit: 10
 
 The block is evaluated at render time — the file on disk is never modified.
 
+Every day-journal note gets one of these automatically in its `## Aufgaben`
+section, filtered to that day's `due_date` — see
+[Morning routine](#morning-routine).
+
 | Parameter | Values | Default |
 |-----------|--------|---------|
 | `type` | `todo` | `todo` |
 | `status` | `open`, `done`, `cancelled` | _(all)_ |
 | `tags` | `[tag1, tag2]` or single | _(all)_ |
+| `due_date` | `YYYY-MM-DD` (exact match) | _(all)_ |
 | `sort` | `due_date`, `created`, `updated` | `due_date` |
 | `limit` | number | `50` |
 
@@ -418,9 +425,40 @@ mimirlink metric show build_failures
 ## Daily commands
 
 ```bash
-mimirlink today      # today's sessions and open todos
-mimirlink summary    # week in review: todos done, commits tracked
+mimirlink today                  # today's sessions and open todos
+mimirlink summary                # week in review: todos done, commits tracked
+mimirlink morning                # morning routine (see below)
+mimirlink morning --lookback 14  # check further back for missing journal entries
 ```
+
+### Morning routine
+
+Run at the start of the day (CLI: `mimirlink morning`, TUI: press `m`) to walk
+through four steps in order:
+
+1. **Todo triage** — every open todo due today or overdue is reviewed one at a
+   time: mark done, reschedule to a new due date, keep the due date but bump
+   priority, or leave it for next time.
+2. **Undated todos** — open todos with no due date at all are listed one at a
+   time so you can optionally assign one. Setting a due date is the only thing
+   that happens — no note is written and no link table is created. The todo
+   then simply matches that day's auto-embedded query (see below) and shows up
+   there; leaving it undated means it's asked about again next run.
+3. **Journal gap-fill** — days in the last 7 (configurable via `--lookback`)
+   with no day-journal note are listed one at a time: open `$EDITOR` now to
+   write a retrospective entry, permanently skip (never asked again for that
+   day), or defer to the next run.
+4. **Plan today** — an optional, multi-line prompt for today's plans/intentions
+   (CLI: one line per point, blank line to finish; TUI: a text area, Enter adds
+   a newline). Each non-empty line becomes its own bullet, appended to a
+   `## Plan` section in today's journal note. Leaving it empty skips the step
+   — no note is force-created just for this.
+
+Todos are never copied or synced into journal notes. Each day-journal note's
+`## Aufgaben` section is created with a `query` block
+(`due_date: <that day>`) that renders live at view time — a todo shows up on
+exactly the day it's due, and only there, with `todos.ndjson` staying the
+single source of truth (see [Query blocks](#query-blocks)).
 
 ---
 
@@ -440,6 +478,8 @@ mimirlink summary    # week in review: todos done, commits tracked
         metric_values.ndjson
         commits.ndjson
         sessions.ndjson
+        projects.ndjson
+        journal_skips.ndjson
       notes/                   # Markdown + YAML frontmatter
         2026.md                # year journal
         2026-06.md             # month journal

@@ -109,7 +109,13 @@ def _week_template(slug: str) -> str:
 def _day_template(slug: str) -> str:
     d = date.fromisoformat(slug)
     label = _DAYS_DE[d.weekday()]
-    return f"# {label}, {slug}\n\n## Log\n\n## Aufgaben\n\n"
+    return (
+        f"# {label}, {slug}\n\n"
+        f"## Plan\n\n"
+        f"## Log\n\n"
+        f"## Aufgaben\n\n"
+        f"```query\ntype: todo\ndue_date: {slug}\n```\n"
+    )
 
 
 _TEMPLATE_FN = {
@@ -190,6 +196,43 @@ def append_to_journal(notes_dir: Path, text: str) -> Path:
 
     post.content = content
     post.metadata["editedAt"] = now.isoformat()
+    path.write_text(frontmatter.dumps(post), encoding="utf-8")
+    return path
+
+
+def append_plan(notes_dir: Path, text: str) -> Path:
+    """Append *text* to today's daily ## Plan section, one bullet per line.
+
+    *text* may be multiline (e.g. from a multi-line CLI/TUI prompt); blank
+    lines are dropped. Creates the day entry (and its parent week/month/year
+    cascade) if absent. Returns the path of the modified file.
+    """
+    import re as _re
+    from datetime import datetime
+    import frontmatter
+
+    today = date.today()
+    slug = slug_for(today, "day")
+    path = ensure_note(notes_dir, slug, "day")
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return path
+    block = "\n".join(f"- {line}" for line in lines)
+
+    post = frontmatter.load(str(path))
+    content = post.content
+
+    # Insert at the start of the ## Plan section body (newest-first within the section)
+    m = _re.search(r'(##\s+Plan\s*\n\n?)', content, _re.IGNORECASE)
+    if m:
+        pos = m.end()
+        content = content[:pos] + block + "\n" + content[pos:]
+    else:
+        content = content.rstrip("\n") + f"\n\n## Plan\n\n{block}\n"
+
+    post.content = content
+    post.metadata["editedAt"] = datetime.now().isoformat()
     path.write_text(frontmatter.dumps(post), encoding="utf-8")
     return path
 

@@ -33,6 +33,9 @@ def _render_todos(params: dict, store: NdjsonStore) -> str:
     if status := params.get("status"):
         todos = [t for t in todos if t.get("status") == status]
 
+    if due_date := params.get("due_date"):
+        todos = [t for t in todos if t.get("due_date") == due_date]
+
     if raw_tags := params.get("tags"):
         filter_tags = [raw_tags] if isinstance(raw_tags, str) else raw_tags
         tag_by_id = {t["id"]: t["name"] for t in store.all("tags")}
