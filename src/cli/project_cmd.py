@@ -1,9 +1,6 @@
 """Project management: registered repo paths, bare-repo clone layout."""
 from __future__ import annotations
 
-import subprocess
-import uuid
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -21,22 +18,6 @@ def _store():
     return WorkspaceManager().store()
 
 
-def _git(args: list[str], cwd: Path | str) -> str:
-    return subprocess.check_output(
-        ["git", *args], cwd=str(cwd), stderr=subprocess.DEVNULL
-    ).decode().strip()
-
-
-def _register(store, name: str, path: Path, remote: str) -> dict:
-    return store.insert("projects", {
-        "id": str(uuid.uuid4()),
-        "name": name,
-        "path": str(path.resolve()),
-        "remote": remote,
-        "created": datetime.now().isoformat(),
-    })
-
-
 @app.command("clone")
 def clone(
     url: str = typer.Argument(..., help="Repository URL to clone"),
@@ -49,6 +30,8 @@ def clone(
     folder acts as the repo, worktrees are plain subfolders. A worktree for the
     default branch is checked out and mimirlink hooks are installed.
     """
+    from src.data.projects import ProjectOpError, clone_project
+
     try:
         store = _store()
     except WorkspaceError as e:
@@ -58,53 +41,13 @@ def clone(
     if name is None:
         name = url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
 
-    if store.find("projects", name=name):
-        console.print(f"[red]Project '{name}' is already registered.[/red]")
+    console.print(f"Cloning [bold]{url}[/bold] → {(dir or Path.cwd()) / name} [dim](bare layout)[/dim]")
+    try:
+        record = clone_project(store, url, name, dir or Path.cwd())
+    except ProjectOpError as e:
+        console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
 
-    root = ((dir or Path.cwd()) / name).resolve()
-    if root.exists():
-        console.print(f"[red]Directory already exists: {root}[/red]")
-        raise typer.Exit(1)
-
-    console.print(f"Cloning [bold]{url}[/bold] → {root} [dim](bare layout)[/dim]")
-    try:
-        subprocess.run(["git", "clone", "--bare", url, str(root / ".bare")], check=True)
-    except subprocess.CalledProcessError:
-        console.print("[red]git clone failed.[/red]")
-        raise typer.Exit(1)
-
-    (root / ".git").write_text("gitdir: ./.bare\n", encoding="utf-8")
-
-    # Bare clones have no fetch refspec — without it, fetch/pull won't update
-    # remote-tracking branches.
-    subprocess.run(
-        ["git", "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"],
-        cwd=str(root), check=True,
-    )
-    subprocess.run(["git", "fetch", "origin"], cwd=str(root), check=True)
-
-    try:
-        default_branch = _git(["symbolic-ref", "--short", "HEAD"], root)
-    except subprocess.CalledProcessError:
-        default_branch = "main"
-
-    try:
-        subprocess.run(
-            ["git", "worktree", "add", f"./{default_branch}", default_branch],
-            cwd=str(root), check=True,
-        )
-        console.print(f"[green]Worktree[/green] {root / default_branch}")
-    except subprocess.CalledProcessError:
-        console.print(f"[yellow]Could not create worktree for '{default_branch}'.[/yellow]")
-
-    from src.cli.hooks_cmd import install_hooks
-    try:
-        install_hooks(repo=root, force=False)
-    except SystemExit:
-        pass  # hook install issues must not fail the clone
-
-    record = _register(store, name, root, url)
     console.print(f"\n[green]Registered project[/green] [bold]{record['name']}[/bold] → {record['path']}")
 
 
@@ -114,8 +57,7 @@ def add(
     path: Path = typer.Option(Path("."), "--path", "-p", help="Project directory (default: cwd)"),
 ) -> None:
     """Register an existing repo/directory as a project."""
-    from src.data.projects import project_root
-    from src.data.sessions import repo_id
+    from src.data.projects import ProjectOpError, register_existing
 
     try:
         store = _store()
@@ -123,26 +65,12 @@ def add(
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
 
-    if store.find("projects", name=name):
-        console.print(f"[red]Project '{name}' is already registered.[/red]")
-        raise typer.Exit(1)
-
-    root = project_root(path) or path.resolve()
-    if not root.exists():
-        console.print(f"[red]Directory not found: {root}[/red]")
-        raise typer.Exit(1)
-
-    existing = [p for p in store.all("projects") if p.get("path") == str(root)]
-    if existing:
-        console.print(f"[red]Path already registered as '{existing[0]['name']}'.[/red]")
-        raise typer.Exit(1)
-
     try:
-        remote = repo_id(root)
-    except Exception:
-        remote = ""
+        record = register_existing(store, name, path)
+    except ProjectOpError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
 
-    record = _register(store, name, root, remote if remote != str(root) else "")
     console.print(f"[green]Registered project[/green] [bold]{record['name']}[/bold] → {record['path']}")
 
 

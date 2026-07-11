@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 import time
 import uuid
-from datetime import datetime
+from datetime import date, datetime, time as _time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -13,6 +13,29 @@ if TYPE_CHECKING:
     from src.data.store import NdjsonStore
 
 DEFAULT_STALE_DAYS = 14
+
+
+def format_duration(total_seconds: float) -> str:
+    """Human-readable duration: "2h 05m" or "45m" for under an hour."""
+    h, rem = divmod(int(max(total_seconds, 0)), 3600)
+    m = rem // 60
+    return f"{h}h {m:02d}m" if h else f"{m}m"
+
+
+def format_ago(ts: str) -> str:
+    """Human-readable relative time: "just now" / "5m ago" / "2h ago" / "3d ago"."""
+    try:
+        d = datetime.fromisoformat(ts)
+        s = int((datetime.now() - d).total_seconds())
+    except Exception:
+        return "?"
+    if s < 60:
+        return "just now"
+    if s < 3600:
+        return f"{s // 60}m ago"
+    if s < 86400:
+        return f"{s // 3600}h ago"
+    return f"{s // 86400}d ago"
 
 
 def _git(args: list[str], cwd: Path | str) -> str:
@@ -66,6 +89,40 @@ def last_session(store: "NdjsonStore", repo: str, branch: str) -> dict | None:
         s for s in store.all("sessions")
         if s.get("repo") == repo and s.get("branch") == branch
     ]
+    return max(sessions, key=lambda s: s.get("start", "")) if sessions else None
+
+
+def worktree_seconds(store: "NdjsonStore", worktree_path: str, since: datetime | None = None) -> float:
+    """Total seconds spent on *worktree_path* across all its sessions.
+
+    If *since* is given, each session is clipped to it (e.g. pass midnight
+    today for a "time spent today" total) — sessions entirely before *since*
+    contribute 0.
+    """
+    total = 0.0
+    for s in store.find("sessions", worktree_path=worktree_path):
+        try:
+            start = datetime.fromisoformat(s["start"])
+        except Exception:
+            continue
+        end = datetime.fromisoformat(s["end"]) if s.get("end") else datetime.now()
+        if since is not None:
+            start = max(start, since)
+        if end <= start:
+            continue
+        total += (end - start).total_seconds()
+    return total
+
+
+def today_start() -> datetime:
+    """Midnight of the current day, for use as `worktree_seconds(..., since=...)`."""
+    return datetime.combine(date.today(), _time.min)
+
+
+def most_recent_session(store: "NdjsonStore") -> dict | None:
+    """The session with the latest start across all worktrees, active or ended —
+    answers "where was I last working" independent of project/worktree."""
+    sessions = store.all("sessions")
     return max(sessions, key=lambda s: s.get("start", "")) if sessions else None
 
 

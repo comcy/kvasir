@@ -25,7 +25,7 @@ Repos are not configured manually — they are discovered at runtime from the cu
 ---
 
 ### Project
-A named, registered repo path within a Workspace (`projects.ndjson`). Every Workspace context has Projects — `private` as well as `work`. A Project is registered explicitly via `mimirlink project add` or created via `mimirlink project clone`, which sets up the **bare-repo worktree layout**:
+A named, registered repo path within a Workspace (`projects.ndjson`). Every Workspace context has Projects — `private` as well as `work`. A Project is registered explicitly via `mimirlink project add` or created via `mimirlink project clone` (CLI), or via the same clone/register dialog in the TUI's **Projects tab** (`5`) — which sets up the **bare-repo worktree layout**:
 
 ```
 <project>/
@@ -44,7 +44,7 @@ A Project differs from a Repo: the Repo is the runtime-discovered identity (remo
 ### Worktree
 A Git worktree path. The primary identifier for a Session when multiple branches of the same repo are active simultaneously. Each worktree has its own `.git` link and can hold an independent Session.
 
-Managed via `mimirlink wt add|list|remove` (alias: `worktree`) inside a Project. `wt add feat/x` creates the folder `feat-x/`, checks out (or creates) the branch, and opens a Session. `wt remove` closes the Session and keeps the branch.
+Managed via `mimirlink wt add|list|remove` (alias: `worktree`) inside a Project, or interactively in the TUI's Projects tab (`n`/`a`/`x`/`o`/`f`/`r` — the last two, open-shell and fetch, are TUI-only conveniences). `wt add feat/x` creates the folder `feat-x/`, checks out (or creates) the branch, and opens a Session. `wt remove` closes the Session and keeps the branch.
 
 ---
 

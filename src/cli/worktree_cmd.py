@@ -1,7 +1,6 @@
 """Worktree commands: add/list/remove worktrees inside a project."""
 from __future__ import annotations
 
-import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -17,12 +16,12 @@ console = Console()
 
 
 def _duration(start: str, end: str | None) -> str:
+    from src.data.sessions import format_duration
+
     try:
         s = datetime.fromisoformat(start)
         e = datetime.fromisoformat(end) if end else datetime.now()
-        h, rem = divmod(int((e - s).total_seconds()), 3600)
-        m = rem // 60
-        return f"{h}h {m:02d}m" if h else f"{m}m"
+        return format_duration((e - s).total_seconds())
     except Exception:
         return "?"
 
@@ -37,39 +36,20 @@ def _require_root() -> Path:
     return root
 
 
-def _branch_exists(root: Path, branch: str) -> bool:
-    return subprocess.run(
-        ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"],
-        cwd=str(root),
-    ).returncode == 0
-
-
 @app.command("add")
 def add(
     branch: str = typer.Argument(..., help="Branch to check out (created if missing)"),
     from_ref: Optional[str] = typer.Option(None, "--from", "-f", help="Start point for a new branch (default: current HEAD)"),
 ) -> None:
     """Create a worktree folder for BRANCH inside the current project."""
+    from src.data.projects import ProjectOpError, add_worktree
     from src.data.sessions import last_session, open_session, repo_id
 
     root = _require_root()
-    dirname = branch.replace("/", "-")
-    dest = root / dirname
-    if dest.exists():
-        console.print(f"[red]Directory already exists: {dest}[/red]")
-        raise typer.Exit(1)
-
-    if _branch_exists(root, branch):
-        cmd = ["git", "worktree", "add", str(dest), branch]
-    else:
-        cmd = ["git", "worktree", "add", "-b", branch, str(dest)]
-        if from_ref:
-            cmd.append(from_ref)
-
     try:
-        subprocess.run(cmd, cwd=str(root), check=True)
-    except subprocess.CalledProcessError:
-        console.print("[red]git worktree add failed.[/red]")
+        dest = add_worktree(root, branch, from_ref)
+    except ProjectOpError as e:
+        console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
 
     console.print(f"[green]Worktree[/green] {dest}  [dim]({branch})[/dim]")
@@ -141,7 +121,7 @@ def remove(
     force: bool = typer.Option(False, "--force", help="Remove even with uncommitted changes"),
 ) -> None:
     """Remove a worktree and close its session. The branch itself is kept."""
-    from src.data.projects import list_worktrees
+    from src.data.projects import ProjectOpError, list_worktrees, remove_worktree
     from src.data.sessions import close_session_for_worktree
 
     root = _require_root()
@@ -154,13 +134,10 @@ def remove(
         console.print(f"[red]No worktree matching '{target}'.[/red]")
         raise typer.Exit(1)
 
-    cmd = ["git", "worktree", "remove", match["path"]]
-    if force:
-        cmd.insert(3, "--force")
     try:
-        subprocess.run(cmd, cwd=str(root), check=True)
-    except subprocess.CalledProcessError:
-        console.print("[red]git worktree remove failed[/red] [dim](uncommitted changes? use --force)[/dim]")
+        remove_worktree(root, match["path"], force=force)
+    except ProjectOpError as e:
+        console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
 
     try:

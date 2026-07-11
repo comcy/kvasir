@@ -85,6 +85,7 @@ Available themes: `dracula` · `nord` · `tokyo-night` · `gruvbox` · `catppucc
 | `2` | Todos tab |
 | `3` | Notes tab (includes Journal) |
 | `4` | Search tab |
+| `5` | Projects tab |
 | `t` | Cycle theme |
 | `r` | Reload dashboard |
 | `m` | Morning routine (todo triage, journal gap-fill, plan today) |
@@ -451,9 +452,26 @@ mimirlink wt remove feat-login --force   # even with uncommitted changes
 
 `wt` is an alias for `worktree` — both work.
 
+### TUI
+
+Everything above is also available from inside `mimirlink tui`, in the **Projects tab (`5`)** — no need to leave the dashboard for a terminal. The tab lists every registered project with its worktrees, ordered by **most recently active first** within each project — so "where was I working" is always the top row. Per worktree it shows the branch, clean/`±N` uncommitted state, time spent **today** and **in total** (aggregated from every past session, not just the current one), a `last: 2h ago` marker when the worktree isn't currently active, and a stale marker. This is the same interactive-manager pairing the Todos tab already has (`TodoPanel` on the dashboard vs. full CRUD in `TodoManager`).
+
+The Dashboard's passive *Sessions / WIP* panel (right column) stays a quick glance view, but now leads with a compact **"⏱ Last active"** line — branch, project, how long ago, and today/total time — before the same Projects/Worktrees listing.
+
+| Key | Action |
+|-----|--------|
+| `n` | New project — clone (bare layout) or register an existing repo |
+| `a` | Add a worktree to the selected project |
+| `x` | Remove — a worktree (confirms first) or unregister a project (files kept) |
+| `o` | **Open a shell** in the selected worktree/project folder — mimirlink suspends, drops you into `$SHELL`; exit the shell to return to the TUI |
+| `f` | Fetch the selected project's `origin` |
+| `r` | Reload |
+
+Clone and fetch run in the background (a `git clone` can take a while) — the dialog shows a spinner instead of freezing the UI.
+
 ### Automatic session tracking
 
-With the hooks installed, every branch switch or `wt add` opens a **session** (`sessions.ndjson`: repo, branch, `worktree_path`, start, end). Parallel worktrees have parallel sessions; switching branches inside one worktree closes its previous session. On every checkout mimirlink prints WIP-resumption context — when you last worked on the branch and which files are uncommitted — plus a warning for stale branches. Sessions and worktree status appear in the TUI dashboard's *Sessions / WIP* panel.
+With the hooks installed, every branch switch or `wt add` opens a **session** (`sessions.ndjson`: repo, branch, `worktree_path`, start, end). Parallel worktrees have parallel sessions; switching branches inside one worktree closes its previous session. On every checkout mimirlink prints WIP-resumption context — when you last worked on the branch and which files are uncommitted — plus a warning for stale branches. Sessions and worktree status appear in the TUI dashboard's *Sessions / WIP* panel (at a glance) and in the interactive *Projects* tab (`5`, see below).
 
 ### Typical workflow
 
@@ -499,6 +517,8 @@ mimirlink wt remove feat-login     # closes the session, keeps the branch
 ```
 
 The `morning` routine complements this: overdue-todo triage first, then straight into the right worktree with full WIP context.
+
+Everything above works the same from the TUI's Projects tab (`n`/`a`/`x`/`o`/`f`/`r` — see [TUI](#tui) above) if you'd rather stay inside `mimirlink tui`, including dropping into a shell in the right folder with `o`.
 
 ---
 

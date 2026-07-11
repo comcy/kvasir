@@ -78,6 +78,8 @@ Vorteile: kein „Arbeits-Checkout" nötig bevor Worktrees angelegt werden könn
 
 **Session-Tracking** läuft über den `post-checkout`-Hook: Branch-Wechsel im selben Worktree schließt die alte Session und öffnet eine neue; parallele Worktrees haben parallele Sessions (Identifier: `worktree_path`). Der Hook zeigt zusätzlich WIP-Resumption (letzte Session + uncommittete Dateien) und Stale-Branch-Warnungen (Schwelle: `[git] stale_days` in `.mimirlink.toml`, Default 14 Tage).
 
+**TUI-Projects-Tab (`5`):** dieselbe Verwaltung interaktiv — `n` (Clone/Add-Dialog), `a` (Worktree hinzufügen), `x` (Worktree/Projekt entfernen, mit Bestätigung), `o` (Shell im Worktree-Ordner öffnen — TUI suspendiert, `$SHELL` startet dort), `f` (Fetch). Clone und Fetch laufen als Background-Worker (`@work(thread=True)`), damit `git clone`/`git fetch` die UI nicht einfrieren. Die git-Mutationslogik liegt zentral in `src/data/projects.py` (`clone_project`, `register_existing`, `add_worktree`, `remove_worktree`, `fetch_project`) — CLI und TUI rufen dieselben Funktionen auf, keine doppelte Implementierung.
+
 ---
 
 ## 3. Datenmodell (NDJSON-„Tabellen")

@@ -22,6 +22,7 @@ from src.tui.widgets.todo_manager import TodoManager
 from src.tui.widgets.notes_panel import NotesPanel
 from src.tui.widgets.search_panel import SearchPanel
 from src.tui.widgets.quick_capture import QuickCaptureBar
+from src.tui.widgets.projects_manager import ProjectsManager
 from src.tui.screens.morning_wizard import MorningWizardScreen
 
 APP_CSS = """
@@ -243,6 +244,7 @@ class DevTrackApp(App):
         Binding("2",      "switch_tab('tab-todos')",     "TODOs"),
         Binding("3",      "switch_tab('tab-notes')",     "Notes"),
         Binding("4",      "switch_tab('tab-search')",    "Search"),
+        Binding("5",      "switch_tab('tab-projects')",  "Projects"),
         Binding("/",      "open_search",        "Search",     show=False),
         Binding("ctrl+p", "command_bar",        "Command bar", priority=True),
     ]
@@ -283,7 +285,7 @@ class DevTrackApp(App):
         yield Static(
             f"  workspace: [bold]{ws}[/bold]  ·  {today}"
             f"  ·  theme: [italic]{theme}[/italic]"
-            f"  ·  [dim]1-4=tabs  t=theme  /=search  m=morning  ctrl+p=cmd  q=quit[/dim]",
+            f"  ·  [dim]1-5=tabs  t=theme  /=search  m=morning  ctrl+p=cmd  q=quit[/dim]",
             id="workspace-bar",
         )
 
@@ -317,6 +319,10 @@ class DevTrackApp(App):
             # ── 4 – Search ────────────────────────────────────────────────────
             with TabPane("Search [dim][4][/dim]", id="tab-search"):
                 yield SearchPanel(self._wm)
+
+            # ── 5 – Projects ──────────────────────────────────────────────────
+            with TabPane("Projects [dim][5][/dim]", id="tab-projects"):
+                yield ProjectsManager(self._wm)
 
         yield Footer()
 
@@ -358,6 +364,13 @@ class DevTrackApp(App):
             try:
                 self.call_after_refresh(
                     lambda: self.query_one("#lv", ListView).focus()
+                )
+            except Exception:
+                pass
+        elif tab_id == "tab-projects":
+            try:
+                self.call_after_refresh(
+                    lambda: self.query_one("#pm-lv", ListView).focus()
                 )
             except Exception:
                 pass
@@ -460,5 +473,5 @@ class DevTrackApp(App):
         self.query_one("#workspace-bar", Static).update(
             f"  workspace: [bold]{ws}[/bold]  ·  {today}"
             f"  ·  theme: [italic]{theme}[/italic]"
-            f"  ·  [dim]1-4=tabs  t=theme  /=search  m=morning  ctrl+p=cmd  q=quit[/dim]"
+            f"  ·  [dim]1-5=tabs  t=theme  /=search  m=morning  ctrl+p=cmd  q=quit[/dim]"
         )

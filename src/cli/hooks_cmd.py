@@ -41,6 +41,51 @@ _HOOKS = {
 
 # ── install-hooks ─────────────────────────────────────────────────────────────
 
+class HooksError(Exception):
+    """Raised when the hooks directory can't be resolved; message is user-facing."""
+
+
+def install_hooks_into(repo: Path, force: bool = False) -> tuple[list[str], list[str], list[str], Path]:
+    """Write the hook scripts into *repo*'s hooks directory. No console output —
+    safe to call from a TUI worker thread as well as the CLI command below.
+
+    Resolved via git so worktrees and the bare `.bare/`-layout work too (there
+    the hooks dir lives in the common dir, not literally `.git/hooks`).
+
+    Returns (installed, already_installed, skipped, hooks_dir) hook names.
+    """
+    repo = repo.resolve()
+    try:
+        hooks_dir = Path(subprocess.check_output(
+            ["git", "rev-parse", "--path-format=absolute", "--git-path", "hooks"],
+            cwd=str(repo), stderr=subprocess.DEVNULL,
+        ).decode().strip())
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        raise HooksError(f"Not a git repository: {repo}")
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+
+    installed: list[str] = []
+    already_installed: list[str] = []
+    skipped: list[str] = []
+
+    for hook_name in _HOOKS:
+        dest = hooks_dir / hook_name
+        if dest.exists() and not force:
+            content = dest.read_text()
+            if "mimirlink install-hooks" in content:
+                already_installed.append(hook_name)
+            else:
+                skipped.append(hook_name)
+            continue
+
+        script = _HOOK_SCRIPT.format(name=hook_name)
+        dest.write_text(script)
+        dest.chmod(dest.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        installed.append(hook_name)
+
+    return installed, already_installed, skipped, hooks_dir
+
+
 @app.command("install-hooks")
 def install_hooks(
     repo: Path = typer.Option(
@@ -51,51 +96,28 @@ def install_hooks(
     force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing hooks"),
 ) -> None:
     """Install mimirlink git hooks into a git repository."""
-    repo = repo.resolve()
-    # Resolve via git so worktrees and the bare .bare/-layout work too
-    # (there the hooks dir lives in the common dir, not literally .git/hooks).
     try:
-        hooks_dir = Path(subprocess.check_output(
-            ["git", "rev-parse", "--path-format=absolute", "--git-path", "hooks"],
-            cwd=str(repo), stderr=subprocess.DEVNULL,
-        ).decode().strip())
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        console.print(f"[red]Not a git repository: {repo}[/red]")
+        installed, already_installed, skipped, hooks_dir = install_hooks_into(repo, force)
+    except HooksError as e:
+        console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
-    hooks_dir.mkdir(parents=True, exist_ok=True)
 
-    installed: list[str] = []
-    skipped: list[str] = []
-
-    for hook_name in _HOOKS:
-        dest = hooks_dir / hook_name
-        if dest.exists() and not force:
-            # Check if it's already ours
-            content = dest.read_text()
-            if "mimirlink install-hooks" in content:
-                installed.append(f"{hook_name} (already installed)")
-                continue
-            skipped.append(hook_name)
-            console.print(
-                f"[yellow]Skipped[/yellow] {hook_name} — file exists. "
-                "Use [bold]--force[/bold] to overwrite."
-            )
-            continue
-
-        script = _HOOK_SCRIPT.format(name=hook_name)
-        dest.write_text(script)
-        dest.chmod(dest.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-        installed.append(hook_name)
+    for hook_name in installed:
         try:
-            shown = dest.relative_to(repo)
+            shown = (hooks_dir / hook_name).relative_to(repo.resolve())
         except ValueError:
-            shown = dest
+            shown = hooks_dir / hook_name
         console.print(f"[green]Installed[/green] {shown}")
+    for hook_name in skipped:
+        console.print(
+            f"[yellow]Skipped[/yellow] {hook_name} — file exists. "
+            "Use [bold]--force[/bold] to overwrite."
+        )
 
-    if installed:
-        console.print(f"\n[dim]Hooks active in:[/dim] {repo}")
+    if installed or already_installed:
+        console.print(f"\n[dim]Hooks active in:[/dim] {repo.resolve()}")
     if skipped:
-        console.print(f"\n[yellow]Run with --force to overwrite skipped hooks.[/yellow]")
+        console.print("\n[yellow]Run with --force to overwrite skipped hooks.[/yellow]")
 
 
 # ── internal: commit-msg ──────────────────────────────────────────────────────

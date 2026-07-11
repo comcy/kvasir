@@ -9,6 +9,8 @@ from textual.widget import Widget
 from textual.widgets import Static
 from textual.containers import Vertical
 
+from src.data.sessions import format_ago as _ago
+from src.data.sessions import format_duration, most_recent_session, today_start, worktree_seconds
 from src.workspace.manager import WorkspaceError, WorkspaceManager
 
 
@@ -16,26 +18,7 @@ def _duration(start: str, end: str | None) -> str:
     try:
         s = datetime.fromisoformat(start)
         e = datetime.fromisoformat(end) if end else datetime.now()
-        delta = e - s
-        h, rem = divmod(int(delta.total_seconds()), 3600)
-        m = rem // 60
-        return f"{h}h {m:02d}m" if h else f"{m}m"
-    except Exception:
-        return "?"
-
-
-def _ago(ts: str) -> str:
-    try:
-        d = datetime.fromisoformat(ts)
-        delta = datetime.now() - d
-        s = int(delta.total_seconds())
-        if s < 60:
-            return "just now"
-        if s < 3600:
-            return f"{s // 60}m ago"
-        if s < 86400:
-            return f"{s // 3600}h ago"
-        return f"{s // 86400}d ago"
+        return format_duration((e - s).total_seconds())
     except Exception:
         return "?"
 
@@ -71,6 +54,26 @@ class SessionPanel(Widget):
         }
 
         with Vertical():
+            # ── Last active ─────────────────────────────────────────────────
+            last = most_recent_session(self._wm.store()) if sessions else None
+            if last:
+                from src.data.projects import find_project
+
+                wt_path = last.get("worktree_path", "")
+                proj = find_project(self._wm.store(), wt_path) if wt_path else None
+                proj_name = proj.get("name", "?") if proj else "?"
+                today_secs = worktree_seconds(self._wm.store(), wt_path, since=today_start())
+                total_secs = worktree_seconds(self._wm.store(), wt_path)
+                when = "active now" if not last.get("end") else _ago(last.get("end", ""))
+
+                yield Static("  [bold]⏱ Last active[/bold]", classes="panel-section-header")
+                yield Static(
+                    f"  {last.get('branch', '?')}  [dim]·  {proj_name}[/dim]\n"
+                    f"  [dim]{when}  ·  {format_duration(today_secs)} today  ·  "
+                    f"{format_duration(total_secs)} total[/dim]",
+                    classes="session-active",
+                )
+
             # ── Projects / Worktrees ──────────────────────────────────────
             if projects:
                 from src.data.projects import list_worktrees, uncommitted_count
