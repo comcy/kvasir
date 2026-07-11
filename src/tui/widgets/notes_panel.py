@@ -331,11 +331,13 @@ class NotesPanel(Widget):
         ("p", "paste_image",     "Paste image"),
         ("l", "insert_wikilink", "Link [[]]"),
         ("r", "reload",          "Reload"),
+        ("ctrl+w", "close_tab",  "Close tab"),
     ]
 
     _mode: reactive[str] = reactive("notes")        # "journal" | "notes"
     _selected_path: reactive[Path | None] = reactive(None)
     _tag_filters: reactive[frozenset] = reactive(frozenset())
+    _open_tabs: reactive[list] = reactive(list)     # list[Path] — explicitly opened notes
 
     def __init__(self, wm: WorkspaceManager) -> None:
         super().__init__()
@@ -575,7 +577,9 @@ class NotesPanel(Widget):
         lines = "\n".join(refs)
         return f"\n\n---\n**Referenced in** ({len(refs)})\n\n{lines}\n"
 
-    def _navigate_to_note(self, path: Path) -> None:
+    def _show_note(self, path: Path) -> None:
+        """Render *path* into the preview pane. Does not open a tab — used for
+        both passive browsing and tab activation."""
         self._selected_path = path
         try:
             post = frontmatter.load(str(path))
@@ -589,6 +593,16 @@ class NotesPanel(Widget):
             self.query_one("#md", Markdown).update(content)
         except Exception:
             pass
+
+    def _add_tab(self, path: Path) -> None:
+        """Open *path* as an editor tab (explicit-open only — never called
+        from passive list/calendar browsing)."""
+        if path not in self._open_tabs:
+            self._open_tabs = [*self._open_tabs, path]
+        self._show_note(path)
+
+    def _navigate_to_note(self, path: Path) -> None:
+        self._show_note(path)
         try:
             lv = self.query_one("#notes-lv", ListView)
             for i, item in enumerate(lv.children):
@@ -599,6 +613,17 @@ class NotesPanel(Widget):
             pass
 
     # --------------------------------------------------------------- compose
+
+    def _compose_note_tabs(self) -> ComposeResult:
+        """Editor-tab strip: one tab per explicitly-opened note, shared across
+        Journal/Notes mode. Empty when nothing has been opened yet."""
+        if not self._open_tabs:
+            return
+        active_id = None
+        if self._selected_path in self._open_tabs:
+            active_id = f"nt-{self._open_tabs.index(self._selected_path)}"
+        tabs = [Tab(path.stem, id=f"nt-{i}") for i, path in enumerate(self._open_tabs)]
+        yield Tabs(*tabs, active=active_id, id="note-tabs")
 
     def compose(self) -> ComposeResult:
         notes = self._load()
@@ -641,6 +666,7 @@ class NotesPanel(Widget):
                         )
 
                     with Vertical(id="viewer-col"):
+                        yield from self._compose_note_tabs()
                         yield Static("  Journal", id="viewer-header")
                         with VerticalScroll(id="md-scroll"):
                             yield Markdown(
@@ -688,6 +714,7 @@ class NotesPanel(Widget):
                             )
 
                     with Vertical(id="viewer-col"):
+                        yield from self._compose_note_tabs()
                         yield Static("  Preview", id="viewer-header")
                         with VerticalScroll(id="md-scroll"):
                             yield Markdown(
@@ -709,7 +736,13 @@ class NotesPanel(Widget):
     def on_tabs_tab_activated(self, event: Tabs.TabActivated) -> None:
         if event.tab is None:
             return
-        self._mode = "journal" if event.tab.id == "tab-journal" else "notes"
+        tid = event.tab.id or ""
+        if tid.startswith("nt-"):
+            idx = int(tid[3:])
+            if 0 <= idx < len(self._open_tabs):
+                self._show_note(self._open_tabs[idx])
+            return
+        self._mode = "journal" if tid == "tab-journal" else "notes"
 
     def on_filter_pill_pressed(self, event: FilterPill.Pressed) -> None:
         pid = event.pill.id or ""
@@ -808,7 +841,7 @@ class NotesPanel(Widget):
                 if not path.exists():
                     path = ensure_note(nd, slug, ntype)
                     self.notify(f"Created {ntype} entry for {slug}", timeout=2)
-                self._navigate_to_note(path)
+                self._add_tab(path)
             except Exception:
                 pass
             return
@@ -837,6 +870,7 @@ class NotesPanel(Widget):
             with self.app.suspend():
                 subprocess.call([editor, str(path)])
             self._update_editedAt(path)
+            self._add_tab(path)
             self.refresh(recompose=True)
             return
         self._navigate_to_note(path)
@@ -857,22 +891,13 @@ class NotesPanel(Widget):
             subprocess.call([editor, str(path)])
         self._update_editedAt(path)
         self._extract_note_todos(path)
-        self._selected_path = path
         # Refresh entry dates in calendar
         try:
             cal = self.query_one("#calendar", JournalCalendar)
             cal.update_entries(journal_dates(nd))
         except Exception:
             pass
-        # Update preview
-        try:
-            post = frontmatter.load(str(path))
-            content = self._rendered_content(post.content)
-            title = post.metadata.get("title", path.stem)
-            self.query_one("#viewer-header", Static).update(f"  {title}")
-            self.query_one("#md", Markdown).update(content)
-        except Exception:
-            pass
+        self._add_tab(path)
 
     def _update_editedAt(self, path: Path) -> None:
         try:
@@ -939,13 +964,12 @@ class NotesPanel(Widget):
 
     def open_note(self, path: Path) -> None:
         """Open $EDITOR for a specific note path (called from search edit action)."""
-        self._selected_path = path
         editor = os.environ.get("EDITOR", "nano")
         with self.app.suspend():
             subprocess.call([editor, str(path)])
         self._update_editedAt(path)
         self._extract_note_todos(path)
-        self._refresh_preview()
+        self._add_tab(path)
         self.refresh(recompose=True)
 
     def _clipboard_paste_image(self) -> bytes | None:
@@ -989,7 +1013,7 @@ class NotesPanel(Widget):
                 subprocess.call([editor, str(path)])
             self._update_editedAt(path)
             self._extract_note_todos(path)
-            self._selected_path = path
+            self._add_tab(path)
             self.refresh(recompose=True)
             self.notify(f"Created '{title}'", timeout=2)
 
@@ -1005,7 +1029,7 @@ class NotesPanel(Widget):
             subprocess.call([editor, str(path)])
         self._update_editedAt(path)
         self._extract_note_todos(path)
-        self._refresh_preview()
+        self._add_tab(path)
         self.refresh(recompose=True)
 
     def action_delete_note(self) -> None:
@@ -1014,6 +1038,8 @@ class NotesPanel(Widget):
             self.notify("Select a note first.", severity="warning")
             return
         path.unlink(missing_ok=True)
+        if path in self._open_tabs:
+            self._open_tabs = [p for p in self._open_tabs if p != path]
         self._selected_path = None
         try:
             self.query_one("#md", Markdown).update("*Select a note from the list.*")
@@ -1068,4 +1094,23 @@ class NotesPanel(Widget):
         self.app.push_screen(WikilinkScreen(notes), cb)
 
     def action_reload(self) -> None:
+        self.refresh(recompose=True)
+
+    def action_close_tab(self) -> None:
+        path = self._selected_path
+        if path is None or path not in self._open_tabs:
+            return
+        tabs = list(self._open_tabs)
+        idx = tabs.index(path)
+        tabs.pop(idx)
+        self._open_tabs = tabs
+        if tabs:
+            self._show_note(tabs[min(idx, len(tabs) - 1)])
+        else:
+            self._selected_path = None
+            try:
+                self.query_one("#viewer-header", Static).update("  Preview")
+                self.query_one("#md", Markdown).update("*Select a note from the list.*")
+            except Exception:
+                pass
         self.refresh(recompose=True)

@@ -270,7 +270,12 @@ Journal entries are listed first (Year → Month → Week → Day, current perio
 | `p` | Paste image from clipboard into `assets/` |
 | `l` | Insert wikilink modal (`[[…]]`) |
 | `r` | Reload |
+| `ctrl+w` | Close the active editor tab |
 | `Tab` | Switch between Journal and Notes mode |
+
+### Editor tabs
+
+Editing still always opens your real `$EDITOR` (vim, nano, whatever) — mimirlink doesn't reimplement a text editor. What it does keep is a row of tabs above the preview, one per note you've explicitly opened: pressing `e`, creating a note, or following a wikilink/date link opens (or reuses) its tab. Just browsing the list or the journal calendar with arrow keys only updates the live preview — it doesn't create a tab, so casual scrolling never clutters the strip. Tabs are shared between Journal and Notes mode, so a day-journal entry and a regular note can both stay open side by side; switching a tab just swaps the preview instantly, no `$EDITOR` involved. Close the active tab with `ctrl+w`.
 
 ### Wikilinks
 
