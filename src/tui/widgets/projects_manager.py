@@ -26,6 +26,7 @@ from src.data.sessions import (
     today_start,
     worktree_seconds,
 )
+from src.tui.screens.commit_form import CommitFormScreen
 from src.tui.screens.confirm import ConfirmScreen
 from src.tui.screens.project_form import ProjectFormScreen
 from src.tui.screens.worktree_form import WorktreeFormScreen
@@ -119,6 +120,7 @@ class ProjectsManager(Widget):
     BINDINGS = [
         ("n", "new_project",  "New project"),
         ("a", "add_worktree", "Add worktree"),
+        ("c", "commit",       "Commit"),
         ("x", "remove",       "Remove"),
         ("o", "open_shell",   "Open shell"),
         ("f", "fetch",        "Fetch"),
@@ -252,6 +254,41 @@ class ProjectsManager(Widget):
             self.notify(f"Worktree '{result['branch']}' created.", timeout=2)
 
         self.app.push_screen(WorktreeFormScreen(project), cb)
+
+    def action_commit(self) -> None:
+        row = self._selected()
+        if not isinstance(row, _WorktreeRow):
+            self.notify("Select a worktree first.", severity="warning")
+            return
+
+        from src.data.scopes import detect_scope, suggest_type
+
+        path = row.worktree["path"]
+        try:
+            out = subprocess.check_output(
+                ["git", "diff", "--staged", "--name-only"], cwd=path,
+            ).decode()
+        except Exception as e:
+            self.notify(str(e), severity="error", timeout=4)
+            return
+        staged = [line for line in out.splitlines() if line.strip()]
+        if not staged:
+            self.notify("Nothing staged.", severity="warning")
+            return
+
+        dominant_scope, breakdown = detect_scope(path, staged)
+        suggested_type = suggest_type(staged)
+
+        def cb(committed: bool) -> None:
+            if not committed:
+                return
+            self._reload()
+            self.notify("Committed.", timeout=2)
+
+        self.app.push_screen(
+            CommitFormScreen(path, len(staged), dominant_scope, breakdown, suggested_type),
+            cb,
+        )
 
     def action_remove(self) -> None:
         row = self._selected()

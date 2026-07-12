@@ -83,6 +83,14 @@ def morning(
 
 
 @app.command()
+def commit() -> None:
+    """Compose and run a Conventional Commit for the staged changes."""
+    from src.cli.commit_cmd import run_commit
+
+    run_commit(console)
+
+
+@app.command()
 def summary() -> None:
     """Weekly summary: todos done, commits, metric values."""
     from src.workspace.manager import WorkspaceManager

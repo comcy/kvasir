@@ -415,6 +415,22 @@ If `mimirlink` is not in PATH when git runs the hook, the hook exits silently wi
 
 ---
 
+## Commit generator
+
+`mimirlink commit` (CLI) and the `c` key on a worktree row in the TUI's Projects tab (`5`) compose a Conventional Commit for you instead of writing one by hand:
+
+```bash
+git add src/auth/login.py
+mimirlink commit
+```
+
+- **Scope** is suggested from `.mimirlink.toml`'s `[scopes]` map (pattern → name, e.g. `"packages/auth/**" = "auth"`), falling back to the first path segment under `packages/` or `src/` for unmapped files. If staged files span more than one scope, you get a non-blocking warning showing the breakdown and the dominant one is pre-filled.
+- **Type** is guessed conservatively — all-docs, all-tests, or all-CI-workflow changes get a suggestion; anything else is left for you to pick, no guessing at `feat` vs `fix`.
+- Whatever you assemble (type, scope, breaking flag, subject, optional body) is validated against the same Conventional-Commits parser the `commit-msg` hook uses **before** anything is committed — an invalid combination is rejected with the offending line shown, never silently committed.
+- No AI/network involved — purely local heuristics. `git commit` runs normally afterward, so the `commit-msg`/`post-commit` hooks (if installed) still fire as usual.
+
+---
+
 ## Projects & Worktrees
 
 A **project** is a named, registered repo path in the active workspace — every workspace context (private or work) has its own projects, stored in `projects.ndjson`.
@@ -467,6 +483,7 @@ The Dashboard's passive *Sessions / WIP* panel (right column) stays a quick glan
 |-----|--------|
 | `n` | New project — clone (bare layout) or register an existing repo |
 | `a` | Add a worktree to the selected project |
+| `c` | Commit staged changes in the selected worktree (see [Commit generator](#commit-generator)) |
 | `x` | Remove — a worktree (confirms first) or unregister a project (files kept) |
 | `o` | **Open a shell** in the selected worktree/project folder — mimirlink suspends, drops you into `$SHELL`; exit the shell to return to the TUI |
 | `f` | Fetch the selected project's `origin` |

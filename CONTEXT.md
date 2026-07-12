@@ -63,7 +63,7 @@ A Git branch with no commit activity for longer than the configured threshold (d
 ---
 
 ### Scope
-A Conventional Commit scope (e.g. `auth`, `billing`, `web`). Defined in `.mimirlink.toml` at the repo root via a path-to-scope map. Falls back to a path heuristic (first path segment under `packages/` or `src/`) if no map is present.
+A Conventional Commit scope (e.g. `auth`, `billing`, `web`). Defined in `.mimirlink.toml` at the repo root via a path-to-scope map. Falls back to a path heuristic (first path segment under `packages/` or `src/`) if no map is present. Detected by `mimirlink commit` (CLI) and the `c` key in the TUI's Projects tab — both suggest the dominant scope across staged files and warn (non-blocking) when a commit spans more than one.
 
 ---
 
