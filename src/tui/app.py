@@ -234,6 +234,10 @@ class CommandBarScreen(ModalScreen[None]):
 class DevTrackApp(App):
     TITLE = "mimirlink"
     CSS = APP_CSS
+    # mimirlink has its own Command Bar (ctrl+p, see CommandBarScreen below) —
+    # Textual's built-in command palette shares the same key by default and
+    # would show up as a second, redundant "ctrl+p" entry in the footer.
+    ENABLE_COMMAND_PALETTE = False
 
     BINDINGS = [
         Binding("q",      "quit",              "Quit",        priority=True),
