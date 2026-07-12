@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import uuid
 from datetime import date, datetime
 from pathlib import Path
 
@@ -172,17 +173,6 @@ _JOURNAL_TYPES = {"day", "week", "month", "year"}
 _JOURNAL_INDENT = {"year": 0, "month": 1, "week": 2, "day": 3}
 
 
-class _SectionHeader(ListItem):
-    """Non-interactive section divider between journal and regular notes."""
-
-    def __init__(self, label: str) -> None:
-        super().__init__()
-        self._label = label
-
-    def compose(self) -> ComposeResult:
-        yield Label(f"  [dim]── {self._label}[/dim]")
-
-
 class NoteItem(ListItem):
     def __init__(self, info: dict) -> None:
         super().__init__()
@@ -232,8 +222,18 @@ class NotesPanel(Widget):
 
     #cal-col {
         width: 26;
+        height: 100%;
         border-right: solid $panel;
         padding: 1 1 0 1;
+    }
+    #journal-tree-label {
+        color: $foreground 40%;
+        text-style: bold;
+        margin-top: 1;
+    }
+    #journal-tree-scroll {
+        height: 1fr;
+        margin-top: 1;
     }
     #cal-ctx {
         height: 1;
@@ -312,15 +312,6 @@ class NotesPanel(Widget):
 
     NoteItem { height: auto; padding: 1 0 0 0; }
 
-    _SectionHeader {
-        height: 1;
-        background: $background;
-        margin-top: 1;
-        padding: 0;
-    }
-    _SectionHeader:hover { background: $background; }
-    ListView:focus > _SectionHeader.--highlight { background: $background; }
-
     #notes-empty { padding: 2 4; color: $foreground 45%; }
     """
 
@@ -332,6 +323,7 @@ class NotesPanel(Widget):
         ("l", "insert_wikilink", "Link [[]]"),
         ("r", "reload",          "Reload"),
         ("ctrl+w", "close_tab",  "Close tab"),
+        ("P", "toggle_pin",      "Pin tab"),
     ]
 
     _mode: reactive[str] = reactive("notes")        # "journal" | "notes"
@@ -342,6 +334,22 @@ class NotesPanel(Widget):
     def __init__(self, wm: WorkspaceManager) -> None:
         super().__init__()
         self._wm = wm
+        self._tab_ids: dict[Path, str] = {}   # Path -> stable "nt-N" id, never reused
+        self._tab_counter = 0
+        self._cal_tab_timer = None            # debounced tab-open while browsing the calendar
+
+        self._pinned: set[Path] = set()
+        pinned_paths: list[Path] = []
+        try:
+            records = sorted(wm.store().all("pinned_notes"), key=lambda r: r.get("pinned_at", ""))
+            for r in records:
+                p = Path(r["path"])
+                if p.exists():
+                    pinned_paths.append(p)
+            self._pinned = set(pinned_paths)
+        except Exception:
+            pass
+        self._open_tabs = pinned_paths  # pinned notes are already open on launch
 
     # ------------------------------------------------------------------- data
 
@@ -594,12 +602,31 @@ class NotesPanel(Widget):
         except Exception:
             pass
 
+    def _tab_label(self, path: Path) -> str:
+        return f"📌{path.stem}" if path in self._pinned else path.stem
+
     def _add_tab(self, path: Path) -> None:
-        """Open *path* as an editor tab (explicit-open only — never called
-        from passive list/calendar browsing)."""
-        if path not in self._open_tabs:
+        """Open *path* as an editor tab: explicit-open sites (edit/create/
+        wikilink) call this directly; calendar browsing calls it after a
+        short debounce (see on_journal_calendar_cursor_changed). Mutates the
+        mounted Tabs widget in place rather than recomposing the panel — a
+        full recompose would reset the JournalCalendar's cursor back to
+        today, since it has no persisted-cursor constructor argument."""
+        is_new = path not in self._open_tabs
+        if is_new:
             self._open_tabs = [*self._open_tabs, path]
+            self._tab_ids[path] = f"nt-{self._tab_counter}"
+            self._tab_counter += 1
         self._show_note(path)
+
+        try:
+            tabs_widget = self.query_one("#note-tabs", Tabs)
+        except Exception:
+            return  # not mounted yet — the next compose() will pick up _open_tabs
+        if is_new:
+            tabs_widget.add_tab(Tab(self._tab_label(path), id=self._tab_ids[path]))
+        tabs_widget.display = True
+        tabs_widget.active = self._tab_ids[path]
 
     def _navigate_to_note(self, path: Path) -> None:
         self._show_note(path)
@@ -616,14 +643,31 @@ class NotesPanel(Widget):
 
     def _compose_note_tabs(self) -> ComposeResult:
         """Editor-tab strip: one tab per explicitly-opened note, shared across
-        Journal/Notes mode. Empty when nothing has been opened yet."""
-        if not self._open_tabs:
-            return
-        active_id = None
-        if self._selected_path in self._open_tabs:
-            active_id = f"nt-{self._open_tabs.index(self._selected_path)}"
-        tabs = [Tab(path.stem, id=f"nt-{i}") for i, path in enumerate(self._open_tabs)]
-        yield Tabs(*tabs, active=active_id, id="note-tabs")
+        Journal/Notes mode. Always mounted (hidden via display=False when
+        empty) so _add_tab/action_close_tab can mutate it in place afterward
+        instead of recomposing the panel."""
+        for path in self._open_tabs:
+            if path not in self._tab_ids:
+                self._tab_ids[path] = f"nt-{self._tab_counter}"
+                self._tab_counter += 1
+
+        active_id = self._tab_ids.get(self._selected_path) if self._selected_path in self._open_tabs else None
+        tabs = [Tab(self._tab_label(path), id=self._tab_ids[path]) for path in self._open_tabs]
+        tabs_widget = Tabs(*tabs, active=active_id, id="note-tabs")
+        tabs_widget.display = bool(self._open_tabs)
+        yield tabs_widget
+
+    def on_mount(self) -> None:
+        # Pinned tabs are already open (seeded in __init__) but compose()'s
+        # initial Markdown/Static widgets are static placeholders — show the
+        # first one so there's something in the preview right on launch.
+        if self._open_tabs and self._selected_path is None:
+            path = self._open_tabs[0]
+            self._show_note(path)
+            try:
+                self.query_one("#note-tabs", Tabs).active = self._tab_ids.get(path, "")
+            except Exception:
+                pass
 
     def compose(self) -> ComposeResult:
         notes = self._load()
@@ -664,6 +708,18 @@ class NotesPanel(Widget):
                             "[dim]Enter·day  W·week  M·month  Y·year[/dim]",
                             id="cal-hint",
                         )
+                        yield Static("Journal", id="journal-tree-label")
+                        journal_notes = self._sort_journal_entries(
+                            [n for n in notes if n.get("ntype") in _JOURNAL_TYPES]
+                        )
+                        with VerticalScroll(id="journal-tree-scroll"):
+                            if journal_notes:
+                                yield ListView(
+                                    *[NoteItem(n) for n in journal_notes], id="journal-tree",
+                                    initial_index=None,
+                                )
+                            else:
+                                yield Static("  [dim]No entries yet.[/dim]")
 
                     with Vertical(id="viewer-col"):
                         yield from self._compose_note_tabs()
@@ -678,11 +734,8 @@ class NotesPanel(Widget):
             # ── Notes mode ───────────────────────────────────────────────────
             else:
                 filtered = self._filtered_notes(notes)
-
-                # Split into journal entries and regular notes
-                journals = self._sort_journal_entries(
-                    [n for n in filtered if n.get("ntype") in _JOURNAL_TYPES]
-                )
+                # Journal entries live in the Journal tab's tree now — only
+                # regular notes show up here.
                 regular = [n for n in filtered if n.get("ntype") not in _JOURNAL_TYPES]
 
                 if all_tags:
@@ -695,18 +748,13 @@ class NotesPanel(Widget):
                 with Horizontal(id="split"):
                     with Vertical(id="list-col"):
                         yield Static(
-                            f"  {len(filtered)} note{'s' if len(filtered) != 1 else ''}",
+                            f"  {len(regular)} note{'s' if len(regular) != 1 else ''}",
                             id="list-header",
                         )
-                        if filtered:
-                            list_items: list[ListItem] = []
-                            if journals:
-                                list_items.append(_SectionHeader("Journal"))
-                                list_items.extend(NoteItem(n) for n in journals)
-                            if regular:
-                                list_items.append(_SectionHeader("Notes"))
-                                list_items.extend(NoteItem(n) for n in regular)
-                            yield ListView(*list_items, id="notes-lv")
+                        if regular:
+                            yield ListView(
+                                *[NoteItem(n) for n in regular], id="notes-lv", initial_index=None,
+                            )
                         else:
                             yield Static(
                                 "  No notes yet.\n  [dim]Press [bold]n[/bold] to create one.[/dim]",
@@ -738,9 +786,9 @@ class NotesPanel(Widget):
             return
         tid = event.tab.id or ""
         if tid.startswith("nt-"):
-            idx = int(tid[3:])
-            if 0 <= idx < len(self._open_tabs):
-                self._show_note(self._open_tabs[idx])
+            path = next((p for p, i in self._tab_ids.items() if i == tid), None)
+            if path is not None:
+                self._show_note(path)
             return
         self._mode = "journal" if tid == "tab-journal" else "notes"
 
@@ -803,6 +851,16 @@ class NotesPanel(Widget):
                 self._selected_path = None
         except Exception:
             pass
+
+        # Debounced tab-open: only the day the cursor settles on (briefly
+        # stops moving) gets a tab, so fast arrow-key browsing doesn't spam
+        # the strip the way opening a tab on every single keypress would.
+        if self._cal_tab_timer is not None:
+            self._cal_tab_timer.stop()
+            self._cal_tab_timer = None
+        if self._selected_path is not None:
+            settled_path = self._selected_path
+            self._cal_tab_timer = self.set_timer(0.6, lambda: self._add_tab(settled_path))
 
     def on_journal_calendar_activated(self, event: JournalCalendar.Activated) -> None:
         self._open_journal_note(event.date, event.note_type)
@@ -871,7 +929,8 @@ class NotesPanel(Widget):
                 subprocess.call([editor, str(path)])
             self._update_editedAt(path)
             self._add_tab(path)
-            self.refresh(recompose=True)
+            if self._mode == "notes":
+                self.refresh(recompose=True)
             return
         self._navigate_to_note(path)
 
@@ -879,6 +938,9 @@ class NotesPanel(Widget):
 
     def _open_journal_note(self, d: date, ntype: str) -> None:
         """Ensure journal note exists, open in editor, then update preview."""
+        if self._cal_tab_timer is not None:
+            self._cal_tab_timer.stop()
+            self._cal_tab_timer = None
         try:
             nd = self._wm.notes_dir()
         except Exception:
@@ -941,16 +1003,23 @@ class NotesPanel(Widget):
     # ─────────────────────────────────────────── public API (called from search)
 
     def navigate_to(self, path: Path) -> None:
-        """Switch to notes mode (if needed) and select a note in the list."""
-        if self._mode != "notes":
-            self._mode = "notes"  # triggers watch__mode → recompose
+        """Switch to the right mode (if needed) and select a note in its list."""
+        target_mode = "journal" if note_type(path.stem) in _JOURNAL_TYPES else "notes"
+        if self._mode != target_mode:
+            self._mode = target_mode  # triggers watch__mode → recompose
             self.call_after_refresh(lambda: self._do_navigate_note(path))
         else:
             self._do_navigate_note(path)
 
     def _do_navigate_note(self, path: Path) -> None:
+        # Both ListViews are built with initial_index=None: ListView's own
+        # _on_mount() forces .index back to its (default 0) initial_index
+        # after mounting, which can race with — and silently overwrite — the
+        # explicit `lv.index = i` below whenever this runs right after a mode
+        # switch (a fresh ListView is mounted then).
+        list_id = "#journal-tree" if note_type(path.stem) in _JOURNAL_TYPES else "#notes-lv"
         try:
-            lv = self.query_one("#notes-lv", ListView)
+            lv = self.query_one(list_id, ListView)
             for i, child in enumerate(lv.children):
                 if isinstance(child, NoteItem) and child.info.get("path") == path:
                     lv.index = i
@@ -1014,7 +1083,10 @@ class NotesPanel(Widget):
             self._update_editedAt(path)
             self._extract_note_todos(path)
             self._add_tab(path)
-            self.refresh(recompose=True)
+            # Only the Notes-mode list needs to reflect the new entry — a full
+            # recompose while in Journal mode would reset the calendar cursor.
+            if self._mode == "notes":
+                self.refresh(recompose=True)
             self.notify(f"Created '{title}'", timeout=2)
 
         self.app.push_screen(NewNoteScreen(), cb)
@@ -1030,7 +1102,8 @@ class NotesPanel(Widget):
         self._update_editedAt(path)
         self._extract_note_todos(path)
         self._add_tab(path)
-        self.refresh(recompose=True)
+        if self._mode == "notes":
+            self.refresh(recompose=True)
 
     def action_delete_note(self) -> None:
         path = self._selected_path
@@ -1038,14 +1111,27 @@ class NotesPanel(Widget):
             self.notify("Select a note first.", severity="warning")
             return
         path.unlink(missing_ok=True)
+
         if path in self._open_tabs:
+            tab_id = self._tab_ids.pop(path, None)
             self._open_tabs = [p for p in self._open_tabs if p != path]
+            try:
+                tabs_widget = self.query_one("#note-tabs", Tabs)
+                if tab_id:
+                    tabs_widget.remove_tab(tab_id)
+                if not self._open_tabs:
+                    tabs_widget.display = False
+            except Exception:
+                pass
+
         self._selected_path = None
         try:
+            self.query_one("#viewer-header", Static).update("  Preview")
             self.query_one("#md", Markdown).update("*Select a note from the list.*")
         except Exception:
             pass
-        self.refresh(recompose=True)
+        if self._mode == "notes":
+            self.refresh(recompose=True)
         self.notify("Note deleted.", timeout=1.5)
 
     def action_paste_image(self) -> None:
@@ -1100,12 +1186,27 @@ class NotesPanel(Widget):
         path = self._selected_path
         if path is None or path not in self._open_tabs:
             return
+        if path in self._pinned:
+            self.notify("Pinned — unpin with P first.", severity="warning")
+            return
+        tab_id = self._tab_ids.pop(path, None)
         tabs = list(self._open_tabs)
         idx = tabs.index(path)
         tabs.pop(idx)
         self._open_tabs = tabs
+
+        try:
+            tabs_widget = self.query_one("#note-tabs", Tabs)
+        except Exception:
+            tabs_widget = None
+        if tabs_widget is not None and tab_id:
+            tabs_widget.remove_tab(tab_id)
+
         if tabs:
-            self._show_note(tabs[min(idx, len(tabs) - 1)])
+            next_path = tabs[min(idx, len(tabs) - 1)]
+            self._show_note(next_path)
+            if tabs_widget is not None:
+                tabs_widget.active = self._tab_ids.get(next_path, "")
         else:
             self._selected_path = None
             try:
@@ -1113,4 +1214,33 @@ class NotesPanel(Widget):
                 self.query_one("#md", Markdown).update("*Select a note from the list.*")
             except Exception:
                 pass
-        self.refresh(recompose=True)
+            if tabs_widget is not None:
+                tabs_widget.display = False
+
+    def action_toggle_pin(self) -> None:
+        path = self._selected_path
+        if path is None or path not in self._open_tabs:
+            self.notify("Select an open tab first.", severity="warning")
+            return
+
+        store = self._wm.store()
+        if path in self._pinned:
+            for rec in store.find("pinned_notes", path=str(path)):
+                store.delete("pinned_notes", rec["id"])
+            self._pinned.discard(path)
+            self.notify("Unpinned.", timeout=1.5)
+        else:
+            store.insert("pinned_notes", {
+                "id": str(uuid.uuid4()),
+                "path": str(path),
+                "pinned_at": datetime.now().isoformat(),
+            })
+            self._pinned.add(path)
+            self.notify("Pinned.", timeout=1.5)
+
+        tab_id = self._tab_ids.get(path)
+        if tab_id:
+            try:
+                self.query_one("#note-tabs", Tabs).get_tab(tab_id).label = self._tab_label(path)
+            except Exception:
+                pass

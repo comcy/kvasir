@@ -231,9 +231,11 @@ The preview panel on the right shows the content of the selected day's note. If 
 
 Below the calendar, three quick-access pills show the ISO week, month, and year for the current cursor position. Click them (or use `W`/`M`/`Y`) to jump directly to that period's note.
 
+Below that, a **Journal tree** lists every year/month/week/day entry that exists (current period first, same ordering logic as everywhere else in the journal), scrollable independently of the calendar above it. It's a normal note list — arrow-key browsing just updates the preview, `e` edits, same as the Notes list. This is the only place journal entries show up now; Notes mode (below) is regular notes only.
+
 ### Notes mode
 
-A flat list of all notes, sorted by last-edited timestamp (most recent first).
+A flat list of regular notes only (journal entries live in the Journal tab's tree above), sorted by last-edited timestamp (most recent first).
 
 #### Tag filter
 
@@ -275,7 +277,11 @@ Journal entries are listed first (Year → Month → Week → Day, current perio
 
 ### Editor tabs
 
-Editing still always opens your real `$EDITOR` (vim, nano, whatever) — mimirlink doesn't reimplement a text editor. What it does keep is a row of tabs above the preview, one per note you've explicitly opened: pressing `e`, creating a note, or following a wikilink/date link opens (or reuses) its tab. Just browsing the list or the journal calendar with arrow keys only updates the live preview — it doesn't create a tab, so casual scrolling never clutters the strip. Tabs are shared between Journal and Notes mode, so a day-journal entry and a regular note can both stay open side by side; switching a tab just swaps the preview instantly, no `$EDITOR` involved. Close the active tab with `ctrl+w`.
+Editing still always opens your real `$EDITOR` (vim, nano, whatever) — mimirlink doesn't reimplement a text editor. What it does keep is a row of tabs above the preview, one per note you've explicitly opened: pressing `e`, creating a note, or following a wikilink/date link opens (or reuses) its tab. Tabs are shared between Journal and Notes mode, so a day-journal entry and a regular note can both stay open side by side; switching a tab just swaps the preview instantly, no `$EDITOR` involved. Close the active tab with `ctrl+w`.
+
+Just browsing the Notes/Journal-tree list with arrow keys only updates the live preview — no tab, so casual scrolling never clutters the strip. The journal calendar is slightly different: since you're normally stepping day-by-day to review a range rather than scanning a long list, briefly passing through a day still only updates the preview, but if the cursor **settles** on a day with an existing entry for about half a second, that day gets a tab too — flipping quickly through a week doesn't spam the strip, but a day you actually paused on stays reachable. Days with no entry yet are never auto-tabbed (or auto-created) just by dwelling on them — only explicit opening (`Enter`/`W`/`M`/`Y`) creates a new entry.
+
+**Pinning** (`P` on the active tab) marks a note as always-there: a pinned tab refuses `ctrl+w` (shown with a warning — unpin with `P` again first) and, unlike normal tabs, is remembered across TUI restarts, reopening automatically next time you launch `mimirlink tui`. The pinned marker (📌) shows in the tab label.
 
 ### Wikilinks
 
@@ -623,6 +629,7 @@ single source of truth (see [Query blocks](#query-blocks)).
         sessions.ndjson
         projects.ndjson
         journal_skips.ndjson
+        pinned_notes.ndjson
       notes/                   # Markdown + YAML frontmatter
         2026.md                # year journal
         2026-06.md             # month journal
