@@ -10,12 +10,16 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from textual import work
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Static, TextArea
 
+from src.agent.provider import AgentError, generate_commit_message
+from src.data.projects import staged_diff_text, staged_files
 from src.hooks.commit_validator import TYPES, parse
+from src.workspace.manager import WorkspaceManager
 
 
 class CommitFormScreen(ModalScreen[bool]):
@@ -47,6 +51,9 @@ class CommitFormScreen(ModalScreen[bool]):
     #error { color: $error; margin-top: 1; }
     #body-input { height: 6; margin-top: 1; border: round $panel; }
     #scope-hint { color: $warning; margin-top: 1; }
+    #agent-row { height: auto; margin-top: 1; align-vertical: middle; }
+    #agent-row LoadingIndicator { width: 3; height: 1; margin-left: 1; }
+    #agent-hint { color: $foreground 40%; margin-top: 1; }
     """
 
     def __init__(
@@ -64,6 +71,7 @@ class CommitFormScreen(ModalScreen[bool]):
         self._breakdown = breakdown
         self._ctype = suggested_type or "feat"
         self._breaking = False
+        self._wm = WorkspaceManager()
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
@@ -73,6 +81,15 @@ class CommitFormScreen(ModalScreen[bool]):
                     f"{s}({n})" for s, n in sorted(self._breakdown.items(), key=lambda kv: -kv[1])
                 )
                 yield Static(f"Spans multiple scopes: {parts}", id="scope-hint")
+
+            if self._wm.agent_config().provider != "none":
+                with Horizontal(id="agent-row"):
+                    yield Button("✦ Generate", id="btn-generate")
+            else:
+                yield Static(
+                    "[dim]No agent configured — press ctrl+g on the dashboard to add one.[/dim]",
+                    id="agent-hint",
+                )
 
             yield Label("Type", classes="field-label")
             with Horizontal(id="type-row"):
@@ -120,6 +137,65 @@ class CommitFormScreen(ModalScreen[bool]):
             self._submit()
         elif bid == "btn-cancel":
             self.dismiss(False)
+        elif bid == "btn-generate":
+            self._generate()
+
+    def _generate(self) -> None:
+        staged = staged_files(self._path)
+        if not staged:
+            self.query_one("#error", Static).update("[red]Nothing staged.[/red]")
+            return
+        btn = self.query_one("#btn-generate", Button)
+        btn.disabled = True
+        btn.label = "Generating…"
+        self.query_one("#error", Static).update("")
+        self._generate_worker(staged)
+
+    @work(thread=True)
+    def _generate_worker(self, staged: list[str]) -> None:
+        cfg = self._wm.agent_config()
+        try:
+            message = generate_commit_message(
+                cfg, staged_diff_text(self._path), staged,
+                self._ctype, self._dominant_scope or None,
+            )
+        except AgentError as e:
+            self.app.call_from_thread(self._generate_failed, str(e))
+            return
+        self.app.call_from_thread(self._generate_done, message)
+
+    def _generate_failed(self, message: str) -> None:
+        btn = self.query_one("#btn-generate", Button)
+        btn.disabled = False
+        btn.label = "✦ Generate"
+        self.query_one("#error", Static).update(f"[red]{message}[/red]")
+
+    def _generate_done(self, message: str) -> None:
+        btn = self.query_one("#btn-generate", Button)
+        btn.disabled = False
+        btn.label = "✦ Generate"
+
+        first, _, rest = message.partition("\n")
+        parsed = parse(first.strip())
+        if parsed:
+            self._ctype = parsed.type
+            for t in TYPES:
+                self.query_one(f"#type-{t}", Button).variant = (
+                    "primary" if t == self._ctype else "default"
+                )
+            if parsed.scope:
+                self.query_one("#inp-scope", Input).value = parsed.scope
+            self.query_one("#inp-subject", Input).value = parsed.subject
+            if parsed.breaking and not self._breaking:
+                self._breaking = True
+                bbtn = self.query_one("#btn-breaking", Button)
+                bbtn.label = "Breaking: yes"
+                bbtn.variant = "error"
+        else:
+            self.query_one("#inp-subject", Input).value = first.strip()
+
+        if rest.strip():
+            self.query_one("#body-input", TextArea).text = rest.strip()
 
     def _submit(self) -> None:
         error = self.query_one("#error", Static)

@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .config import (
+    AgentConfig,
     GlobalConfig,
     WorkspaceConfig,
     load_global_config,
@@ -36,6 +37,17 @@ class WorkspaceManager:
     def _save(self) -> None:
         save_global_config(self.devtrack_dir, self.config)
         self._config = None  # invalidate cache
+
+    # ------------------------------------------------------------------
+    # Agent config
+    # ------------------------------------------------------------------
+
+    def agent_config(self) -> AgentConfig:
+        return self.config.agent
+
+    def set_agent_config(self, agent: AgentConfig) -> None:
+        self.config.agent = agent
+        self._save()
 
     # ------------------------------------------------------------------
     # Workspace CRUD

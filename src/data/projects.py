@@ -220,3 +220,48 @@ def remove_worktree(root: Path | str, worktree_path: Path | str, force: bool = F
 def fetch_project(root: Path | str) -> None:
     """Fetch the project's origin remote."""
     _git_checked(["fetch", "origin"], root, "git fetch failed")
+
+
+def pull_project(worktree_dir: Path | str) -> None:
+    """Pull the current branch of *worktree_dir* from its upstream."""
+    _git_checked(["pull"], worktree_dir, "git pull failed")
+
+
+def push_project(worktree_dir: Path | str) -> None:
+    """Push the current branch of *worktree_dir* to its upstream."""
+    _git_checked(["push"], worktree_dir, "git push failed")
+
+
+def git_status_text(worktree_dir: Path | str) -> str:
+    """Human-readable `git status` output for *worktree_dir* (never raises)."""
+    try:
+        return _git(["status"], worktree_dir)
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        detail = e.stderr.decode(errors="replace").strip() if getattr(e, "stderr", None) else str(e)
+        return f"git status failed: {detail}"
+
+
+def git_log_text(worktree_dir: Path | str, limit: int = 30) -> str:
+    """One-line-per-commit `git log` output for *worktree_dir* (never raises)."""
+    try:
+        return _git(["log", f"-{limit}", "--oneline", "--decorate"], worktree_dir)
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        detail = e.stderr.decode(errors="replace").strip() if getattr(e, "stderr", None) else str(e)
+        return f"git log failed: {detail}"
+
+
+def staged_diff_text(worktree_dir: Path | str) -> str:
+    """`git diff --staged` output for *worktree_dir* (empty string on error)."""
+    try:
+        return _git(["diff", "--staged"], worktree_dir)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return ""
+
+
+def staged_files(worktree_dir: Path | str) -> list[str]:
+    """Names of currently staged files in *worktree_dir* (empty list on error)."""
+    try:
+        out = _git(["diff", "--staged", "--name-only"], worktree_dir)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return []
+    return [line for line in out.splitlines() if line.strip()]

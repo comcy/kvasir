@@ -24,6 +24,7 @@ from src.tui.widgets.search_panel import SearchPanel
 from src.tui.widgets.quick_capture import QuickCaptureBar
 from src.tui.widgets.projects_manager import ProjectsManager
 from src.tui.screens.morning_wizard import MorningWizardScreen
+from src.tui.screens.agent_settings import AgentSettingsScreen
 
 APP_CSS = """
 Screen { background: $background; }
@@ -134,9 +135,18 @@ _CMD_SUGGESTIONS = [
     "wt list",
     "wt add <branch>",
     "wt remove <folder>",
+    "wt pull",
+    "wt push",
+    "wt status",
+    "wt log",
     "today",
     "summary",
     "hooks install-hooks",
+    "agent show",
+    "agent set --provider cli --cli-command \"claude -p\"",
+    "agent set --provider anthropic --model claude-sonnet-5",
+    "agent set --provider none",
+    "commit -g",
 ]
 
 
@@ -244,6 +254,7 @@ class DevTrackApp(App):
         Binding("t",      "next_theme",         "Theme"),
         Binding("r",      "reload_dashboard",   "Reload"),
         Binding("m",      "morning_routine",    "Morning"),
+        Binding("ctrl+g", "agent_settings",     "Agent"),
         Binding("1",      "switch_tab('tab-dashboard')", "Dashboard"),
         Binding("2",      "switch_tab('tab-todos')",     "TODOs"),
         Binding("3",      "switch_tab('tab-notes')",     "Notes"),
@@ -289,7 +300,7 @@ class DevTrackApp(App):
         yield Static(
             f"  workspace: [bold]{ws}[/bold]  ·  {today}"
             f"  ·  theme: [italic]{theme}[/italic]"
-            f"  ·  [dim]1-5=tabs  t=theme  /=search  m=morning  ctrl+p=cmd  q=quit[/dim]",
+            f"  ·  [dim]1-5=tabs  t=theme  /=search  m=morning  ctrl+g=agent  ctrl+p=cmd  q=quit[/dim]",
             id="workspace-bar",
         )
 
@@ -447,6 +458,13 @@ class DevTrackApp(App):
 
     def action_command_bar(self) -> None:
         self.push_screen(CommandBarScreen())
+
+    def action_agent_settings(self) -> None:
+        def cb(cfg) -> None:
+            if cfg is not None:
+                self.notify(f"Agent provider: {cfg.provider}", timeout=2)
+
+        self.push_screen(AgentSettingsScreen(self._wm), cb)
 
     def action_morning_routine(self) -> None:
         try:

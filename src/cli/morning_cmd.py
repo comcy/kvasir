@@ -1,7 +1,6 @@
 """Interactive `mimirlink morning` routine: todo triage, journal gap-fill, plan today."""
 from __future__ import annotations
 
-import os
 import subprocess
 from datetime import date, datetime
 
@@ -11,6 +10,7 @@ from rich.prompt import Prompt
 
 from src.workspace.manager import WorkspaceError, WorkspaceManager
 from src.data.journal import append_plan, ensure_note, slug_for
+from src.platform_utils import default_editor
 from src.data.morning import (
     due_or_overdue_todos,
     mark_journal_day_skipped,
@@ -85,7 +85,7 @@ def _fill_journal_gaps(console: Console, notes_dir, store, lookback: int) -> Non
         )
         if action == "o":
             path = ensure_note(notes_dir, slug_for(d, "day"), "day")
-            editor = os.environ.get("EDITOR", "nano")
+            editor = default_editor()
             subprocess.call([editor, str(path)])
             console.print("  [green]entry updated[/green]\n")
         elif action == "s":

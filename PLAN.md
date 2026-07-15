@@ -110,7 +110,7 @@ n:m-Beziehungen über separate Mapping-Dateien.
 ### Commit-Generator
 - Analysiert `git diff --staged`: geänderte Pfade, Symbole.
 - Leitet **Typ** (`feat`, `fix`, `refactor`, `chore`, `perf`, `test`, breaking `!`) und **Scope** ab.
-- Optionaler KI-Vorschlag **lokal** über `ollama` (z. B. `llama3.2:3b` / `codellama`) – komplett offline. Nutzer bestätigt/passt an.
+- Optionaler Agent-Vorschlag über einen pluggable Provider (`none` | `cli` | `anthropic`, konfiguriert in `~/.mimirlink/config.toml`) – `cli` deckt lokale/offline Setups wie `ollama run ...` genauso ab wie jeden anderen Agenten. Nutzer bestätigt/passt an, siehe `mimirlink agent`.
 
 ### Scope-Erkennung im Monorepo (kein Nx/Turborepo vorhanden)
 1. **Explizite Scope-Map** (Config im Repo-Root, geteilt im Team):
@@ -206,7 +206,7 @@ metrics:
 | Scheduler (lokal) | `apscheduler` |
 | Benachrichtigungen | `plyer` |
 | Sprache (offline) | `vosk` / `whisper.cpp`, `pyttsx3` |
-| Lokales LLM (optional) | `ollama` |
+| Agent-Anbindung (optional) | `anthropic` (API) oder beliebiges CLI-Tool (`ollama`, `claude`, ...) via `provider: cli` |
 
 ---
 

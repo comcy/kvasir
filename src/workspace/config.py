@@ -15,9 +15,29 @@ class WorkspaceConfig:
 
 
 @dataclass
+class AgentConfig:
+    """Optional LLM/agent hookup for commit-message generation.
+
+    provider: "none" | "anthropic" | "cli"
+    - "cli" runs `cli_command` as a subprocess, feeding the prompt on stdin and
+      reading the message back from stdout — the generic way to attach *any*
+      agent (a `claude` CLI, `ollama run ...`, a custom script) without a
+      hard dependency on a specific vendor SDK.
+    - "anthropic" calls the Anthropic API directly (requires the optional
+      `anthropic` package). The API key itself is never stored here — only
+      the name of the environment variable to read it from.
+    """
+    provider: str = "none"
+    model: str = "claude-sonnet-5"
+    api_key_env: str = "ANTHROPIC_API_KEY"
+    cli_command: str = ""
+
+
+@dataclass
 class GlobalConfig:
     active_workspace: str = ""
     workspaces: list[WorkspaceConfig] = field(default_factory=list)
+    agent: AgentConfig = field(default_factory=AgentConfig)
 
 
 def _load_toml(path: Path) -> dict:
@@ -62,9 +82,14 @@ def load_global_config(devtrack_dir: Path) -> GlobalConfig:
         WorkspaceConfig(**ws)
         for ws in raw.get("workspaces", [])
     ]
+    try:
+        agent = AgentConfig(**raw.get("agent", {}))
+    except TypeError:
+        agent = AgentConfig()
     return GlobalConfig(
         active_workspace=raw.get("active_workspace", ""),
         workspaces=workspaces,
+        agent=agent,
     )
 
 
@@ -80,6 +105,12 @@ def save_global_config(devtrack_dir: Path, config: GlobalConfig) -> None:
             }
             for ws in config.workspaces
         ]
+    data["agent"] = {
+        "provider": config.agent.provider,
+        "model": config.agent.model,
+        "api_key_env": config.agent.api_key_env,
+        "cli_command": config.agent.cli_command,
+    }
     _write_toml(devtrack_dir / "config.toml", data)
 
 

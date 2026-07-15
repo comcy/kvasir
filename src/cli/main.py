@@ -11,6 +11,7 @@ from .hooks_cmd import app as hooks_app, hook_app
 from .note_cmd import app as note_app
 from .project_cmd import app as project_app
 from .worktree_cmd import app as worktree_app
+from .agent_cmd import app as agent_app
 
 console = Console()
 app = typer.Typer(
@@ -28,6 +29,7 @@ app.add_typer(note_app, name="note")
 app.add_typer(project_app, name="project")
 app.add_typer(worktree_app, name="worktree")
 app.add_typer(worktree_app, name="wt", hidden=True)
+app.add_typer(agent_app, name="agent")
 
 
 @app.command()
@@ -83,11 +85,15 @@ def morning(
 
 
 @app.command()
-def commit() -> None:
+def commit(
+    generate: bool = typer.Option(
+        False, "--generate", "-g", help="Prefill the message via the configured agent (see `mimirlink agent`)"
+    ),
+) -> None:
     """Compose and run a Conventional Commit for the staged changes."""
     from src.cli.commit_cmd import run_commit
 
-    run_commit(console)
+    run_commit(console, use_agent=generate)
 
 
 @app.command()

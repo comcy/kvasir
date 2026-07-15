@@ -116,6 +116,13 @@ A metric whose values are entered explicitly by the user via `mimirlink metric r
 
 ---
 
+### Agent
+An optional, pluggable LLM hookup configured in `~/.mimirlink/config.toml`'s `[agent]` table (`provider: none|anthropic|cli`, see `AgentConfig` in `src/workspace/config.py`). `provider: cli` is the vendor-agnostic path — any command that reads a prompt on stdin and prints a reply on stdout (a `claude` CLI, `ollama run ...`, a custom script). `provider: anthropic` calls the Anthropic API directly (optional `anthropic` package; the API key itself is never written to config, only the name of the environment variable holding it). `src/agent/provider.py::ask(cfg, prompt)` is the generic primitive; `generate_commit_message()` is its first caller. Configured via `mimirlink agent show|set` (CLI) or `ctrl+g` (TUI).
+
+**Avoid:** "LLM", "AI", "model" as the primary term when referring to this concept — say Agent.
+
+---
+
 ## Configuration Hierarchy
 
 ```
@@ -123,7 +130,7 @@ A metric whose values are entered explicitly by the user via `mimirlink metric r
 .mimirlink.toml               ← repo-root, committed, shared with team
 ```
 
-Repo-level config overrides global config for scope maps and stale-branch thresholds. LLM endpoint and path-prefix workspace mappings live in global config only.
+Repo-level config overrides global config for scope maps and stale-branch thresholds. Agent settings and path-prefix workspace mappings live in global config only.
 
 ---
 
@@ -132,4 +139,4 @@ Repo-level config overrides global config for scope maps and stale-branch thresh
 - Todos have **no Repo field** — they are Workspace-level. Use Tags for grouping by topic or project.
 - Wikilinks do **not** resolve to Todos or Repos.
 - Sessions are **not** manually started/stopped in normal use — Hooks handle it.
-- LLM integration is **always optional** — every command degrades gracefully without it.
+- Agent integration is **always optional** — every command degrades gracefully without it (`provider: none` by default).

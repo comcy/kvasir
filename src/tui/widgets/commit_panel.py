@@ -42,6 +42,7 @@ class CommitPanel(Widget):
                 date_str = c.get("date", "")[:10]
                 breaking = c.get("breaking", False)
                 hash_str = c.get("hash", "")[:7]
+                proj_name = c.get("project") or "?"
 
                 color = TYPE_COLOR.get(ctype, "white")
                 scope_str = f"({scope})" if scope else ""
@@ -50,6 +51,6 @@ class CommitPanel(Widget):
                 yield Static(
                     f"  [{color}]{ctype}{scope_str}{bang}[/{color}]"
                     f"  [dim]{hash_str}[/dim]  {subject}"
-                    f"  [dim]{date_str}[/dim]",
+                    f"  [dim]{proj_name}  ·  {date_str}[/dim]",
                     classes="commit-row",
                 )

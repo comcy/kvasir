@@ -90,6 +90,7 @@ Available themes: `dracula` · `nord` · `tokyo-night` · `gruvbox` · `catppucc
 | `r` | Reload dashboard |
 | `m` | Morning routine (todo triage, journal gap-fill, plan today) |
 | `/` | Jump to search |
+| `ctrl+g` | Agent settings — configure the optional commit-message agent (see [Agent](#agent-optional)) |
 | `ctrl+p` | Command bar (run any `mimirlink` subcommand inline) |
 | `q` | Quit |
 
@@ -277,7 +278,7 @@ Journal entries are listed first (Year → Month → Week → Day, current perio
 
 ### Editor tabs
 
-Editing still always opens your real `$EDITOR` (vim, nano, whatever) — mimirlink doesn't reimplement a text editor. What it does keep is a row of tabs above the preview, one per note you've explicitly opened: pressing `e`, creating a note, or following a wikilink/date link opens (or reuses) its tab. Tabs are shared between Journal and Notes mode, so a day-journal entry and a regular note can both stay open side by side; switching a tab just swaps the preview instantly, no `$EDITOR` involved. Close the active tab with `ctrl+w`.
+Editing still always opens your real `$EDITOR` (vim, nano, whatever) — mimirlink doesn't reimplement a text editor. If `$EDITOR`/`$VISUAL` isn't set, it falls back to `nano` on Linux/macOS and Notepad on Windows. What it does keep is a row of tabs above the preview, one per note you've explicitly opened: pressing `e`, creating a note, or following a wikilink/date link opens (or reuses) its tab. Tabs are shared between Journal and Notes mode, so a day-journal entry and a regular note can both stay open side by side; switching a tab just swaps the preview instantly, no `$EDITOR` involved. Close the active tab with `ctrl+w`.
 
 Just browsing the Notes/Journal-tree list with arrow keys only updates the live preview — no tab, so casual scrolling never clutters the strip. The journal calendar is slightly different: since you're normally stepping day-by-day to review a range rather than scanning a long list, briefly passing through a day still only updates the preview, but if the cursor **settles** on a day with an existing entry for about half a second, that day gets a tab too — flipping quickly through a week doesn't spam the strip, but a day you actually paused on stays reachable. Days with no entry yet are never auto-tabbed (or auto-created) just by dwelling on them — only explicit opening (`Enter`/`W`/`M`/`Y`) creates a new entry.
 
@@ -303,7 +304,9 @@ Press `p` to paste an image from the clipboard:
 - Saves as `notes/assets/img-<timestamp>.png`
 - Copies `![](assets/img-<timestamp>.png)` to your clipboard — paste into your editor
 
-In the preview panel, images are rendered as `🖼 filename` anchors. Clicking one opens the image in your system viewer (`xdg-open` on Linux). Requires `wl-paste` (Wayland) or `xclip` (X11).
+In the preview panel, images are rendered as `🖼 filename` anchors. Clicking one opens the image in your system's default viewer (`os.startfile` on Windows, `open` on macOS, `xdg-open` on Linux).
+
+Clipboard access goes through [Pillow](https://pillow.readthedocs.io/) (image paste) and [pyperclip](https://github.com/asweigart/pyperclip) (copying the Markdown link) — both work natively on Windows and macOS. On Linux they still shell out to `wl-paste`/`wl-copy` (Wayland) or `xclip` (X11), so one of those needs to be installed.
 
 ### Query blocks
 
@@ -433,7 +436,35 @@ mimirlink commit
 - **Scope** is suggested from `.mimirlink.toml`'s `[scopes]` map (pattern → name, e.g. `"packages/auth/**" = "auth"`), falling back to the first path segment under `packages/` or `src/` for unmapped files. If staged files span more than one scope, you get a non-blocking warning showing the breakdown and the dominant one is pre-filled.
 - **Type** is guessed conservatively — all-docs, all-tests, or all-CI-workflow changes get a suggestion; anything else is left for you to pick, no guessing at `feat` vs `fix`.
 - Whatever you assemble (type, scope, breaking flag, subject, optional body) is validated against the same Conventional-Commits parser the `commit-msg` hook uses **before** anything is committed — an invalid combination is rejected with the offending line shown, never silently committed.
-- No AI/network involved — purely local heuristics. `git commit` runs normally afterward, so the `commit-msg`/`post-commit` hooks (if installed) still fire as usual.
+- By default no AI/network is involved — purely local heuristics. `git commit` runs normally afterward, so the `commit-msg`/`post-commit` hooks (if installed) still fire as usual.
+- With an [agent configured](#agent-optional), `mimirlink commit -g` (CLI) or the **✦ Generate** button (TUI commit form) drafts the type/scope/subject/body from the staged diff instead — you still confirm/edit before anything commits. Without an agent configured, behavior is unchanged.
+
+---
+
+## Agent (optional)
+
+mimirlink can hand the staged diff to an LLM/agent to draft a commit message — entirely optional, off by default, and never blocks any command when unconfigured (`provider = "none"`). Nothing about the rest of the tool depends on it.
+
+There are two ways to attach an agent, configured globally in `~/.mimirlink/config.toml` under `[agent]`:
+
+- **`cli`** — the generic way to attach *anything*: a shell command that reads the prompt on stdin and prints the reply on stdout. Works with a `claude` CLI, `ollama run llama3.2`, or your own script — no vendor lock-in.
+  ```bash
+  mimirlink agent set --provider cli --cli-command "claude -p"
+  ```
+- **`anthropic`** — calls the Anthropic API directly. Requires the optional `anthropic` package (`pip install "mimirlink[llm]"`) and an API key in an environment variable (never stored in the config file, only the variable's *name* is):
+  ```bash
+  mimirlink agent set --provider anthropic --model claude-sonnet-5 --api-key-env ANTHROPIC_API_KEY
+  ```
+
+Check the current configuration:
+
+```bash
+mimirlink agent show
+```
+
+**In the TUI**, `ctrl+g` opens the same settings as a form. Once a provider is set, the commit form (`c` on a worktree row) shows a **✦ Generate** button that fills in type/scope/subject/body from the staged diff — you still review and confirm before committing.
+
+The underlying `ask(cfg, prompt) -> str` primitive (`src/agent/provider.py`) is generic and not tied to commit messages — it's the building block for any future agent-powered feature (e.g. asking questions about notes).
 
 ---
 
@@ -493,7 +524,13 @@ The Dashboard's passive *Sessions / WIP* panel (right column) stays a quick glan
 | `x` | Remove — a worktree (confirms first) or unregister a project (files kept) |
 | `o` | **Open a shell** in the selected worktree/project folder — mimirlink suspends, drops you into `$SHELL`; exit the shell to return to the TUI |
 | `f` | Fetch the selected project's `origin` |
+| `u` | Pull the selected worktree's branch from its upstream |
+| `p` | Push the selected worktree's branch to its upstream |
+| `s` | Show `git status` for the selected worktree |
+| `v` | Show `git log` for the selected worktree |
 | `r` | Reload |
+
+Pull/push/fetch run in the background; status/log open a read-only modal. All four (plus `commit`) are also available from the CLI as `mimirlink wt pull|push|status|log`, run from inside the worktree folder.
 
 Clone and fetch run in the background (a `git clone` can take a while) — the dialog shows a spinner instead of freezing the UI.
 
@@ -615,7 +652,7 @@ single source of truth (see [Query blocks](#query-blocks)).
 
 ```
 ~/.mimirlink/
-  config.toml                  # workspace list + active workspace
+  config.toml                  # workspace list + active workspace + [agent] settings
   workspaces/
     private/
       workspace.toml           # metadata + sync target

@@ -9,12 +9,7 @@ import typer
 from rich.console import Console
 from rich.prompt import Confirm, Prompt
 
-
-def _staged_files(root: Path) -> list[str]:
-    out = subprocess.check_output(
-        ["git", "diff", "--staged", "--name-only"], cwd=str(root),
-    ).decode()
-    return [line for line in out.splitlines() if line.strip()]
+from src.data.projects import staged_files as _staged_files
 
 
 def _require_root(console: Console) -> Path:
@@ -41,7 +36,7 @@ def _read_body(console: Console) -> str:
     return "\n".join(lines)
 
 
-def run_commit(console: Console) -> None:
+def run_commit(console: Console, use_agent: bool = False) -> None:
     """Compose and run a Conventional Commit for the staged changes."""
     from src.data.scopes import detect_scope, suggest_type
     from src.hooks.commit_validator import TYPES, parse
@@ -60,11 +55,36 @@ def run_commit(console: Console) -> None:
     suggested_type = suggest_type(staged)
     console.print(f"\n[bold]{len(staged)}[/bold] file(s) staged.\n")
 
+    default_subject = ""
+    default_body = ""
+    if use_agent:
+        from src.agent.provider import AgentError, generate_commit_message
+        from src.data.projects import staged_diff_text
+        from src.workspace.manager import WorkspaceManager
+
+        cfg = WorkspaceManager().agent_config()
+        try:
+            message = generate_commit_message(
+                cfg, staged_diff_text(root), staged, suggested_type, dominant_scope,
+            )
+            first, _, rest = message.partition("\n")
+            suggestion = parse(first.strip())
+            if suggestion:
+                suggested_type = suggestion.type
+                dominant_scope = suggestion.scope
+                default_subject = suggestion.subject
+            else:
+                default_subject = first.strip()
+            default_body = rest.strip()
+            console.print(f"[dim]Agent suggestion:[/dim] {message}\n")
+        except AgentError as e:
+            console.print(f"[yellow]Agent unavailable ({e}) — falling back to manual entry.[/yellow]\n")
+
     while True:
         ctype = Prompt.ask("Type", choices=list(TYPES), default=suggested_type or "feat")
         scope = Prompt.ask("Scope", default=dominant_scope or "").strip()
         breaking = Confirm.ask("Breaking change?", default=False)
-        subject = Prompt.ask("Subject").strip()
+        subject = Prompt.ask("Subject", default=default_subject).strip()
         if not subject:
             console.print("[red]Subject is required.[/red]\n")
             continue
@@ -78,7 +98,10 @@ def run_commit(console: Console) -> None:
             continue
         break
 
-    body = _read_body(console)
+    if default_body and Confirm.ask("Use agent-suggested body?", default=True):
+        body = default_body
+    else:
+        body = _read_body(console)
     message = first_line if not body.strip() else f"{first_line}\n\n{body}"
 
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as f:

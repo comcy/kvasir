@@ -17,11 +17,14 @@ dependencies = [
     "watchdog>=4",
     "apscheduler>=3.10",
     "plyer>=2",
+    "pillow>=10",
+    "pyperclip>=1.8",
     "tomli>=2; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]
 pdf = ["weasyprint>=60"]
+llm = ["anthropic>=0.40"]
 dev = ["ruff"]
 
 [project.scripts]

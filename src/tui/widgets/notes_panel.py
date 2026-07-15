@@ -1,7 +1,6 @@
 """Notes panel: Journal calendar view + Notes list view, edit via $EDITOR."""
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 import uuid
@@ -22,6 +21,7 @@ from src.data.query import render_query_blocks
 from src.data.journal import (
     journal_dates, note_type, slug_for, ensure_note,
 )
+from src.platform_utils import default_editor, open_file
 from src.tui.widgets.journal_calendar import JournalCalendar
 
 _WIKILINK_RE = re.compile(r'\[\[([^\]]+)\]\]')
@@ -221,7 +221,7 @@ class NotesPanel(Widget):
     #journal-split { height: 1fr; }
 
     #cal-col {
-        width: 26;
+        width: 38;
         height: 100%;
         border-right: solid $panel;
         padding: 1 1 0 1;
@@ -884,9 +884,9 @@ class NotesPanel(Widget):
 
         if Path(href).suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}:
             try:
-                subprocess.Popen(["xdg-open", href])
+                open_file(href)
             except Exception:
-                self.notify("Could not open image — xdg-open not available.", severity="warning")
+                self.notify("Could not open image — no default app handler found.", severity="warning")
             return
 
         # date: link — navigate to journal note, auto-create if missing
@@ -924,7 +924,7 @@ class NotesPanel(Widget):
             )
             path.write_text(frontmatter.dumps(post), encoding="utf-8")
             self.notify(f"Created '{path.stem}' — opening editor…", timeout=2)
-            editor = os.environ.get("EDITOR", "nano")
+            editor = default_editor()
             with self.app.suspend():
                 subprocess.call([editor, str(path)])
             self._update_editedAt(path)
@@ -948,7 +948,7 @@ class NotesPanel(Widget):
             return
         slug = slug_for(d, ntype)
         path = ensure_note(nd, slug, ntype)
-        editor = os.environ.get("EDITOR", "nano")
+        editor = default_editor()
         with self.app.suspend():
             subprocess.call([editor, str(path)])
         self._update_editedAt(path)
@@ -1033,7 +1033,7 @@ class NotesPanel(Widget):
 
     def open_note(self, path: Path) -> None:
         """Open $EDITOR for a specific note path (called from search edit action)."""
-        editor = os.environ.get("EDITOR", "nano")
+        editor = default_editor()
         with self.app.suspend():
             subprocess.call([editor, str(path)])
         self._update_editedAt(path)
@@ -1042,23 +1042,25 @@ class NotesPanel(Widget):
         self.refresh(recompose=True)
 
     def _clipboard_paste_image(self) -> bytes | None:
-        if os.environ.get("WAYLAND_DISPLAY"):
-            result = subprocess.run(["wl-paste", "--type", "image/png"], capture_output=True)
-        else:
-            result = subprocess.run(
-                ["xclip", "-selection", "clipboard", "-t", "image/png", "-o"],
-                capture_output=True,
-            )
-        return result.stdout if result.returncode == 0 and result.stdout else None
+        """PNG bytes currently on the clipboard, or None if it's not an image.
+
+        Goes through Pillow's ImageGrab, which is native on Windows/macOS and
+        shells out to wl-paste/xclip on Linux (same runtime requirement as
+        before, just no hand-rolled per-OS branching here anymore)."""
+        from io import BytesIO
+        from PIL import ImageGrab
+
+        img = ImageGrab.grabclipboard()
+        if img is None or isinstance(img, list):  # list: clipboard held file paths, not image data
+            return None
+        buf = BytesIO()
+        img.save(buf, "PNG")
+        return buf.getvalue()
 
     def _clipboard_copy_text(self, text: str) -> None:
         try:
-            if os.environ.get("WAYLAND_DISPLAY"):
-                subprocess.run(["wl-copy"], input=text.encode(), check=True)
-            else:
-                subprocess.run(
-                    ["xclip", "-selection", "clipboard"], input=text.encode(), check=True
-                )
+            import pyperclip
+            pyperclip.copy(text)
         except Exception:
             pass
 
@@ -1077,7 +1079,7 @@ class NotesPanel(Widget):
                 "\n\n", title=title, created=now, editedAt=now, tags=result.get("tags", []),
             )
             path.write_text(frontmatter.dumps(post), encoding="utf-8")
-            editor = os.environ.get("EDITOR", "nano")
+            editor = default_editor()
             with self.app.suspend():
                 subprocess.call([editor, str(path)])
             self._update_editedAt(path)
@@ -1096,7 +1098,7 @@ class NotesPanel(Widget):
         if not path:
             self.notify("Select a note first.", severity="warning")
             return
-        editor = os.environ.get("EDITOR", "nano")
+        editor = default_editor()
         with self.app.suspend():
             subprocess.call([editor, str(path)])
         self._update_editedAt(path)
@@ -1141,9 +1143,8 @@ class NotesPanel(Widget):
         dest = assets_dir / f"img-{timestamp}.png"
         try:
             data = self._clipboard_paste_image()
-        except FileNotFoundError:
-            tool = "wl-paste" if os.environ.get("WAYLAND_DISPLAY") else "xclip"
-            self.notify(f"{tool} not found — install it to enable image paste.", severity="error", timeout=4)
+        except Exception as e:
+            self.notify(f"Could not read clipboard: {e}", severity="error", timeout=5)
             return
         if not data:
             self.notify("No image found in clipboard.", severity="warning")

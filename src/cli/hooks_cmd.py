@@ -158,6 +158,7 @@ def _run_commit_msg(msg_file: str = typer.Argument(...)) -> None:
 @hook_app.command("post-commit")
 def _run_post_commit() -> None:
     """Record last commit into commits.ndjson. Called by git hook."""
+    from src.data.projects import find_project, project_root
     from src.hooks.commit_validator import parse, strip_comments
     from src.workspace.manager import WorkspaceManager
 
@@ -182,6 +183,17 @@ def _run_post_commit() -> None:
     parsed = parse(first_line)
     breaking = bool(parsed and parsed.breaking) or "BREAKING CHANGE:" in body
 
+    try:
+        wm = WorkspaceManager()
+        store = wm.store()
+        proj = find_project(store, project_root(Path.cwd()) or Path.cwd())
+    except Exception:
+        wm, store, proj = None, None, None
+    project_fields = {
+        "project_id": proj.get("id") if proj else None,
+        "project": proj.get("name") if proj else None,
+    }
+
     if parsed:
         record = {
             "id": str(uuid.uuid4()),
@@ -192,6 +204,7 @@ def _run_post_commit() -> None:
             "breaking": breaking,
             "date": commit_date,
             "body": body,
+            **project_fields,
         }
     else:
         record = {
@@ -203,11 +216,13 @@ def _run_post_commit() -> None:
             "breaking": False,
             "date": commit_date,
             "body": body,
+            **project_fields,
         }
 
     try:
-        wm = WorkspaceManager()
-        wm.store().insert("commits", record)
+        if store is None:
+            store = WorkspaceManager().store()
+        store.insert("commits", record)
     except Exception:
         pass  # never block the workflow on NDJSON write errors
 

@@ -1,7 +1,6 @@
 """Morning routine wizard — todo triage, journal gap-fill, plan today."""
 from __future__ import annotations
 
-import os
 import subprocess
 from datetime import date, datetime
 
@@ -17,6 +16,7 @@ from src.data.morning import (
     missing_journal_days,
     undated_todos,
 )
+from src.platform_utils import default_editor
 from src.workspace.manager import WorkspaceManager
 
 
@@ -265,7 +265,7 @@ class MorningWizardScreen(ModalScreen[None]):
 
         if bid == "btn-open":
             path = ensure_note(self._notes_dir, slug_for(d, "day"), "day")
-            editor = os.environ.get("EDITOR", "nano")
+            editor = default_editor()
             with self.app.suspend():
                 subprocess.call([editor, str(path)])
             self._advance_day()

@@ -14,7 +14,16 @@ from textual.containers import Vertical, VerticalScroll
 from textual.widget import Widget
 from textual.widgets import Label, ListItem, ListView, Static
 
-from src.data.projects import fetch_project, list_worktrees, remove_worktree, uncommitted_count
+from src.data.projects import (
+    fetch_project,
+    git_log_text,
+    git_status_text,
+    list_worktrees,
+    pull_project,
+    push_project,
+    remove_worktree,
+    uncommitted_count,
+)
 from src.data.sessions import (
     close_session_for_worktree,
     format_ago,
@@ -28,6 +37,7 @@ from src.data.sessions import (
 )
 from src.tui.screens.commit_form import CommitFormScreen
 from src.tui.screens.confirm import ConfirmScreen
+from src.tui.screens.git_output import GitOutputScreen
 from src.tui.screens.project_form import ProjectFormScreen
 from src.tui.screens.worktree_form import WorktreeFormScreen
 from src.workspace.manager import WorkspaceManager
@@ -124,6 +134,10 @@ class ProjectsManager(Widget):
         ("x", "remove",       "Remove"),
         ("o", "open_shell",   "Open shell"),
         ("f", "fetch",        "Fetch"),
+        ("u", "pull",         "Pull"),
+        ("p", "push",         "Push"),
+        ("s", "status",       "Status"),
+        ("v", "log",          "Log"),
         ("r", "reload",       "Reload"),
     ]
 
@@ -261,17 +275,11 @@ class ProjectsManager(Widget):
             self.notify("Select a worktree first.", severity="warning")
             return
 
+        from src.data.projects import staged_files
         from src.data.scopes import detect_scope, suggest_type
 
         path = row.worktree["path"]
-        try:
-            out = subprocess.check_output(
-                ["git", "diff", "--staged", "--name-only"], cwd=path,
-            ).decode()
-        except Exception as e:
-            self.notify(str(e), severity="error", timeout=4)
-            return
-        staged = [line for line in out.splitlines() if line.strip()]
+        staged = staged_files(path)
         if not staged:
             self.notify("Nothing staged.", severity="warning")
             return
@@ -338,6 +346,63 @@ class ProjectsManager(Widget):
         with self.app.suspend():
             subprocess.call([shell], cwd=path)
         self._reload()
+
+    def _selected_worktree(self) -> "_WorktreeRow | None":
+        row = self._selected()
+        if not isinstance(row, _WorktreeRow):
+            self.notify("Select a worktree first.", severity="warning")
+            return None
+        return row
+
+    def action_pull(self) -> None:
+        row = self._selected_worktree()
+        if row is None:
+            return
+        self.notify(f"Pulling {row.worktree.get('branch')}…", timeout=2)
+        self._pull_worker(row.worktree["path"])
+
+    @work(thread=True)
+    def _pull_worker(self, path: str) -> None:
+        try:
+            pull_project(path)
+        except Exception as e:
+            self.app.call_from_thread(self.notify, str(e), severity="error", timeout=4)
+            return
+        self.app.call_from_thread(self._reload)
+        self.app.call_from_thread(self.notify, "Pulled.", timeout=2)
+
+    def action_push(self) -> None:
+        row = self._selected_worktree()
+        if row is None:
+            return
+        self.notify(f"Pushing {row.worktree.get('branch')}…", timeout=2)
+        self._push_worker(row.worktree["path"])
+
+    @work(thread=True)
+    def _push_worker(self, path: str) -> None:
+        try:
+            push_project(path)
+        except Exception as e:
+            self.app.call_from_thread(self.notify, str(e), severity="error", timeout=4)
+            return
+        self.app.call_from_thread(self._reload)
+        self.app.call_from_thread(self.notify, "Pushed.", timeout=2)
+
+    def action_status(self) -> None:
+        row = self._selected_worktree()
+        if row is None:
+            return
+        branch = row.worktree.get("branch") or "(detached)"
+        text = git_status_text(row.worktree["path"])
+        self.app.push_screen(GitOutputScreen(f"git status — {branch}", text))
+
+    def action_log(self) -> None:
+        row = self._selected_worktree()
+        if row is None:
+            return
+        branch = row.worktree.get("branch") or "(detached)"
+        text = git_log_text(row.worktree["path"])
+        self.app.push_screen(GitOutputScreen(f"git log — {branch}", text))
 
     def action_fetch(self) -> None:
         row = self._selected()

@@ -146,3 +146,51 @@ def remove(
         pass
 
     console.print(f"[yellow]Removed[/yellow] {match['path']}  [dim](branch '{match['branch']}' kept)[/dim]")
+
+
+@app.command("pull")
+def pull() -> None:
+    """Pull the current branch from its upstream. Run from inside a worktree folder."""
+    from src.data.projects import ProjectOpError, pull_project
+
+    _require_root()  # just validates we're inside a registered project
+    try:
+        pull_project(Path.cwd())
+    except ProjectOpError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    console.print("[green]Pulled.[/green]")
+
+
+@app.command("push")
+def push() -> None:
+    """Push the current branch to its upstream. Run from inside a worktree folder."""
+    from src.data.projects import ProjectOpError, push_project
+
+    _require_root()
+    try:
+        push_project(Path.cwd())
+    except ProjectOpError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    console.print("[green]Pushed.[/green]")
+
+
+@app.command("status")
+def status() -> None:
+    """Show `git status` for the current worktree."""
+    from src.data.projects import git_status_text
+
+    _require_root()
+    console.print(git_status_text(Path.cwd()))
+
+
+@app.command("log")
+def log(
+    limit: int = typer.Option(30, "--limit", "-n", help="Number of commits to show"),
+) -> None:
+    """Show `git log --oneline` for the current worktree."""
+    from src.data.projects import git_log_text
+
+    _require_root()
+    console.print(git_log_text(Path.cwd(), limit=limit))
