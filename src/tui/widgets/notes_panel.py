@@ -21,8 +21,10 @@ from src.data.query import render_query_blocks
 from src.data.journal import (
     journal_dates, note_type, slug_for, ensure_note,
 )
+from src.data.links import resolve_wikilink_target
 from src.platform_utils import default_editor, open_file
 from src.tui.widgets.journal_calendar import JournalCalendar
+from src.tui.widgets.note_graph import NoteGraphView
 
 _WIKILINK_RE = re.compile(r'\[\[([^\]]+)\]\]')
 _IMG_RE = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
@@ -219,6 +221,7 @@ class NotesPanel(Widget):
 
     /* ── journal mode ── */
     #journal-split { height: 1fr; }
+    #note-graph { height: 1fr; }
 
     #cal-col {
         width: 38;
@@ -234,6 +237,9 @@ class NotesPanel(Widget):
     #journal-tree-scroll {
         height: 1fr;
         margin-top: 1;
+    }
+    #journal-tree {
+        background: transparent;
     }
     #cal-ctx {
         height: 1;
@@ -326,7 +332,7 @@ class NotesPanel(Widget):
         ("P", "toggle_pin",      "Pin tab"),
     ]
 
-    _mode: reactive[str] = reactive("notes")        # "journal" | "notes"
+    _mode: reactive[str] = reactive("notes")        # "journal" | "notes" | "graph"
     _selected_path: reactive[Path | None] = reactive(None)
     _tag_filters: reactive[frozenset] = reactive(frozenset())
     _open_tabs: reactive[list] = reactive(list)     # list[Path] — explicitly opened notes
@@ -514,12 +520,12 @@ class NotesPanel(Widget):
         except Exception:
             return content
 
+        stems = {p.stem for p in nd.glob("*.md")}
+
         def replace(m: re.Match) -> str:
             name = m.group(1)
-            slug = name.lower().replace(" ", "-")
-            for candidate in [name, slug]:
-                if (nd / f"{candidate}.md").exists():
-                    return f"[\\[\\[{name}\\]\\]](note:{candidate})"
+            target = resolve_wikilink_target(name, stems)
+            slug = target or name.lower().replace(" ", "-")
             return f"[\\[\\[{name}\\]\\]](note:{slug})"
 
         return _WIKILINK_RE.sub(replace, content)
@@ -682,10 +688,13 @@ class NotesPanel(Widget):
 
         with Vertical():
             # ── Mode tab bar (Textual Tabs — arrow keys to switch) ───────────
-            active_tab = "tab-journal" if self._mode == "journal" else "tab-notes"
+            active_tab = {
+                "journal": "tab-journal", "notes": "tab-notes", "graph": "tab-graph",
+            }[self._mode]
             yield Tabs(
                 Tab("Journal", id="tab-journal"),
                 Tab("Notes",   id="tab-notes"),
+                Tab("Graph",   id="tab-graph"),
                 active=active_tab,
             )
 
@@ -730,6 +739,10 @@ class NotesPanel(Widget):
                                 id="md",
                                 open_links=False,
                             )
+
+            # ── Graph mode ───────────────────────────────────────────────────
+            elif self._mode == "graph":
+                yield NoteGraphView(self._wm, id="note-graph")
 
             # ── Notes mode ───────────────────────────────────────────────────
             else:
@@ -790,7 +803,7 @@ class NotesPanel(Widget):
             if path is not None:
                 self._show_note(path)
             return
-        self._mode = "journal" if tid == "tab-journal" else "notes"
+        self._mode = {"tab-journal": "journal", "tab-graph": "graph"}.get(tid, "notes")
 
     def on_filter_pill_pressed(self, event: FilterPill.Pressed) -> None:
         pid = event.pill.id or ""
@@ -864,6 +877,22 @@ class NotesPanel(Widget):
 
     def on_journal_calendar_activated(self, event: JournalCalendar.Activated) -> None:
         self._open_journal_note(event.date, event.note_type)
+
+    def on_note_graph_view_activated(self, event: NoteGraphView.Activated) -> None:
+        """Enter on a graph node opens it the same way a wikilink click does."""
+        try:
+            nd = self._wm.notes_dir()
+        except Exception:
+            return
+        path = nd / f"{event.note_id}.md"
+        if not path.exists():
+            return
+        target_mode = "journal" if note_type(path.stem) in _JOURNAL_TYPES else "notes"
+        if self._mode != target_mode:
+            self._mode = target_mode
+            self.call_after_refresh(lambda: self._add_tab(path))
+        else:
+            self._add_tab(path)
 
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
         if not isinstance(event.item, NoteItem):
