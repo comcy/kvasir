@@ -304,9 +304,9 @@ Press `p` to paste an image from the clipboard:
 - Saves as `notes/assets/img-<timestamp>.png`
 - Copies `![](assets/img-<timestamp>.png)` to your clipboard — paste into your editor
 
-In the preview panel, images are rendered as `🖼 filename` anchors. Clicking one opens the image in your system's default viewer (`os.startfile` on Windows, `open` on macOS, `xdg-open` on Linux).
+**Inline rendering (optional):** with `pip install "mimirlink[images]"` (adds [`textual-image`](https://github.com/lnqs/textual-image)) and a terminal that supports Kitty's graphics protocol, Sixel, or iTerm2's image protocol, images embedded in a note render directly in the preview, in place, instead of as a link. Terminal capability is detected once at startup — Kitty, iTerm2, WezTerm, Konsole, foot, and Windows Terminal (1.22+) work out of the box; unsupported terminals (or the package not installed) automatically get a Unicode-block approximation or fall back to a clickable `🖼 filename` anchor, exactly as before — the preview never breaks, it just renders at whatever fidelity is available. Clicking a non-rendered image anchor opens it in your system's default viewer (`os.startfile` on Windows, `open` on macOS, `xdg-open` on Linux).
 
-Clipboard access goes through [Pillow](https://pillow.readthedocs.io/) (image paste) and [pyperclip](https://github.com/asweigart/pyperclip) (copying the Markdown link) — both work natively on Windows and macOS. On Linux they still shell out to `wl-paste`/`wl-copy` (Wayland) or `xclip` (X11), so one of those needs to be installed.
+Clipboard access for pasting goes through [Pillow](https://pillow.readthedocs.io/) (image paste) and [pyperclip](https://github.com/asweigart/pyperclip) (copying the Markdown link) — both work natively on Windows and macOS. On Linux they still shell out to `wl-paste`/`wl-copy` (Wayland) or `xclip` (X11), so one of those needs to be installed.
 
 ### Query blocks
 

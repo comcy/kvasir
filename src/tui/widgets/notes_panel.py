@@ -25,6 +25,7 @@ from src.data.links import resolve_wikilink_target
 from src.platform_utils import default_editor, open_file
 from src.tui.widgets.journal_calendar import JournalCalendar
 from src.tui.widgets.note_graph import NoteGraphView
+from src.tui.widgets.note_preview import IMAGES_AVAILABLE, NotePreview
 
 _WIKILINK_RE = re.compile(r'\[\[([^\]]+)\]\]')
 _IMG_RE = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
@@ -511,7 +512,8 @@ class NotesPanel(Widget):
             content = raw
         content = self._resolve_wikilinks(content)
         content = self._linkify_dates(content)
-        content = self._fix_images(content)
+        if not IMAGES_AVAILABLE:
+            content = self._fix_images(content)
         return content
 
     def _resolve_wikilinks(self, content: str) -> str:
@@ -604,7 +606,7 @@ class NotesPanel(Widget):
             title = path.stem
         try:
             self.query_one("#viewer-header", Static).update(f"  {title}")
-            self.query_one("#md", Markdown).update(content)
+            self.query_one("#md", NotePreview).set_content(content, self._wm.notes_dir())
         except Exception:
             pass
 
@@ -734,10 +736,8 @@ class NotesPanel(Widget):
                         yield from self._compose_note_tabs()
                         yield Static("  Journal", id="viewer-header")
                         with VerticalScroll(id="md-scroll"):
-                            yield Markdown(
-                                "*Navigate to a day and press Enter to open.*",
-                                id="md",
-                                open_links=False,
+                            yield NotePreview(
+                                "*Navigate to a day and press Enter to open.*", id="md",
                             )
 
             # ── Graph mode ───────────────────────────────────────────────────
@@ -778,11 +778,7 @@ class NotesPanel(Widget):
                         yield from self._compose_note_tabs()
                         yield Static("  Preview", id="viewer-header")
                         with VerticalScroll(id="md-scroll"):
-                            yield Markdown(
-                                "*Select a note from the list.*",
-                                id="md",
-                                open_links=False,
-                            )
+                            yield NotePreview(id="md")
 
     # ─────────────────────────────────────────── reactive watchers
 
@@ -851,13 +847,13 @@ class NotesPanel(Widget):
                 )
                 title = post.metadata.get("title", path.stem)
                 self.query_one("#viewer-header", Static).update(f"  {title}")
-                self.query_one("#md", Markdown).update(content)
+                self.query_one("#md", NotePreview).set_content(content, nd)
                 self._selected_path = path
             else:
                 self.query_one("#viewer-header", Static).update(
                     f"  {d.isoformat()}  [dim](no entry)[/dim]"
                 )
-                self.query_one("#md", Markdown).update(
+                self.query_one("#md", NotePreview).set_content(
                     f"*No journal entry for {d.isoformat()}.*\n\n"
                     "[dim]Press **Enter** to create and open.[/dim]"
                 )
@@ -905,7 +901,7 @@ class NotesPanel(Widget):
         except Exception:
             pass
         content = self._rendered_content(event.item.info.get("content", ""))
-        self.query_one("#md", Markdown).update(content)
+        self.query_one("#md", NotePreview).set_content(content, self._wm.notes_dir())
 
     def on_markdown_link_clicked(self, event: Markdown.LinkClicked) -> None:
         event.stop()
@@ -1025,7 +1021,7 @@ class NotesPanel(Widget):
         except Exception:
             content = path.read_text(encoding="utf-8", errors="replace")
         try:
-            self.query_one("#md", Markdown).update(content)
+            self.query_one("#md", NotePreview).set_content(content, self._wm.notes_dir())
         except Exception:
             pass
 
@@ -1055,7 +1051,7 @@ class NotesPanel(Widget):
                     lv.focus()
                     self._selected_path = path
                     rendered = self._rendered_content(child.info.get("content", ""))
-                    self.query_one("#md", Markdown).update(rendered)
+                    self.query_one("#md", NotePreview).set_content(rendered, self._wm.notes_dir())
                     break
         except Exception:
             pass
@@ -1158,7 +1154,7 @@ class NotesPanel(Widget):
         self._selected_path = None
         try:
             self.query_one("#viewer-header", Static).update("  Preview")
-            self.query_one("#md", Markdown).update("*Select a note from the list.*")
+            self.query_one("#md", NotePreview).set_content("*Select a note from the list.*")
         except Exception:
             pass
         if self._mode == "notes":
@@ -1241,7 +1237,7 @@ class NotesPanel(Widget):
             self._selected_path = None
             try:
                 self.query_one("#viewer-header", Static).update("  Preview")
-                self.query_one("#md", Markdown).update("*Select a note from the list.*")
+                self.query_one("#md", NotePreview).set_content("*Select a note from the list.*")
             except Exception:
                 pass
             if tabs_widget is not None:

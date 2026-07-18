@@ -25,6 +25,7 @@ dependencies = [
 [project.optional-dependencies]
 pdf = ["weasyprint>=60"]
 llm = ["anthropic>=0.40"]
+images = ["textual-image[textual]>=0.8"]
 dev = ["ruff"]
 
 [project.scripts]
