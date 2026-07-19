@@ -94,6 +94,10 @@ Available themes: `dracula` · `nord` · `tokyo-night` · `gruvbox` · `catppucc
 | `ctrl+p` | Command bar (run any `mimirlink` subcommand inline) |
 | `q` | Quit |
 
+### Dashboard
+
+Four panels: TODOs (left), Metrics + Recent Commits (center), Sessions/WIP (right). Each one **hides itself entirely** — column header included — when it has nothing to show (no todos, no metrics/commits, no sessions or registered projects), rather than taking up a third of the screen for an empty-state hint; the remaining panels' columns expand to fill the freed space. On a workspace with nothing in it at all, the dashboard shows a single "nothing to show yet" line instead of three empty columns. `r` reloads (also re-evaluates which panels should be visible).
+
 ---
 
 ## Todos
@@ -528,11 +532,21 @@ The Dashboard's passive *Sessions / WIP* panel (right column) stays a quick glan
 | `p` | Push the selected worktree's branch to its upstream |
 | `s` | Show `git status` for the selected worktree |
 | `v` | Show `git log` for the selected worktree |
+| `d` | Open the **diff viewer** for the selected worktree's uncommitted changes |
+| `b` | **Compare branches** — pick base/target, opens the diff viewer in PR-diff mode |
 | `r` | Reload |
 
 Pull/push/fetch run in the background; status/log open a read-only modal. All four (plus `commit`) are also available from the CLI as `mimirlink wt pull|push|status|log`, run from inside the worktree folder.
 
 Clone and fetch run in the background (a `git clone` can take a while) — the dialog shows a spinner instead of freezing the UI.
+
+### Diff viewer & branch comparison
+
+`d` opens a file list (with `+added -removed` counts) alongside a colorized, hunk-aware diff of the selected worktree's uncommitted changes — `]`/`[` jump between hunks (the active hunk's header is highlighted, since scrolling alone is invisible once the whole diff already fits on screen), `t` toggles between **all uncommitted changes** (`git diff HEAD`, the default) and **staged only** (`git diff --staged`). Read-only by design — no stage/unstage-per-hunk (`git add -p` territory); use the [commit generator](#commit-generator) for staging as a whole.
+
+A **Source**/**Target** branch selector sits at the top of the same screen — the default view leaves Source on "Working tree" (today's uncommitted-changes view, unchanged). Pick a branch in Source to switch to a PR-style comparison: `target...source` (triple-dot/merge-base diff, the same semantics GitHub/GitLab use for pull-request diffs — only what *source* introduced since it diverged from *target*, e.g. a feature branch vs. the `master` it would merge into), no need to leave the screen. `b` is a shortcut that opens straight into comparison mode, defaulting Source to your current branch and Target to the repo's main branch.
+
+CLI equivalents: `mimirlink wt diff [--staged]` and `mimirlink wt compare <base> <target>` (both print a colorized diff, no interactive hunk-jump since there's no TUI to jump around in).
 
 ### Automatic session tracking
 
@@ -589,22 +603,24 @@ Everything above works the same from the TUI's Projects tab (`n`/`a`/`x`/`o`/`f`
 
 ## Metrics
 
+Two are **built in, computed automatically** — no setup, always shown in the dashboard's Metrics panel as soon as there's a session or a tracked commit: `focus_time` (total session duration this week, across every worktree) and `commit_frequency` (tracked commits this week). Neither is stored — they're derived live from `sessions.ndjson`/`commits.ndjson` each time the panel renders.
+
+Everything else is a **manual metric** you define and record yourself:
+
 ```bash
 # Define a metric
 mimirlink metric define build_failures \
   --label "Build failures per week" --type counter --agg weekly
 
-mimirlink metric define focus_time \
-  --label "Focus time (minutes)" --type duration --agg daily
-
 # Record values
 mimirlink metric record build_failures 1
-mimirlink metric record focus_time 45
 
 # Inspect
 mimirlink metric show
 mimirlink metric show build_failures
 ```
+
+Avoid naming a manual metric `focus_time` or `commit_frequency` — those names are reserved for the built-in auto metrics and would show up as a confusing second row alongside them.
 
 ---
 

@@ -8,6 +8,13 @@ from textual.widget import Widget
 from textual.widgets import DataTable, Static
 from textual.containers import Vertical
 
+from src.data.metrics_auto import (
+    commit_count_this_week,
+    focus_time_seconds_this_week,
+    has_any_data,
+)
+from src.data.sessions import format_duration
+
 
 def _sparkline(values: list[float], width: int = 8) -> str:
     """Render a tiny sparkline using block characters."""
@@ -32,15 +39,29 @@ def _week_label(ts: str) -> str:
 class MetricPanel(Widget):
     BORDER_TITLE = "Metrics"
 
-    def __init__(self, metrics: list[dict], values: list[dict], **kwargs) -> None:
+    def __init__(
+        self,
+        metrics: list[dict],
+        values: list[dict],
+        sessions: list[dict] | None = None,
+        commits: list[dict] | None = None,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
         self._metrics = metrics
         self._values = values
+        self._sessions = sessions or []
+        self._commits = commits or []
+
+    @staticmethod
+    def has_content(metrics: list[dict], sessions: list[dict], commits: list[dict]) -> bool:
+        return bool(metrics) or has_any_data(sessions, commits)
 
     def compose(self) -> ComposeResult:
-        if not self._metrics:
+        has_auto = has_any_data(self._sessions, self._commits)
+        if not has_auto and not self._metrics:
             yield Static(
-                "  [dim]No metrics defined yet.[/dim]\n  mimirlink metric define ...",
+                "  [dim]No metrics yet.[/dim]\n  mimirlink metric define ...",
                 classes="empty-hint",
             )
             return
@@ -51,6 +72,12 @@ class MetricPanel(Widget):
 
         table = DataTable(zebra_stripes=True, cursor_type="row", id="metric-table")
         table.add_columns("Metric", "Label", "Last", "Σ", "Trend")
+
+        if has_auto:
+            focus_secs = focus_time_seconds_this_week(self._sessions)
+            commit_cnt = commit_count_this_week(self._commits)
+            table.add_row("focus_time", "Focus time (this week)", format_duration(focus_secs), "—", "auto")
+            table.add_row("commit_frequency", "Commits (this week)", str(commit_cnt), "—", "auto")
 
         for m in self._metrics:
             vals = values_by_metric.get(m["id"], [])

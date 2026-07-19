@@ -292,7 +292,7 @@ class DevTrackApp(App):
     # ---------------------------------------------------------------- compose
 
     def compose(self) -> ComposeResult:
-        _, metrics, mv, commits, _sessions, ws = self._load_dashboard()
+        todos, metrics, mv, commits, sessions, ws = self._load_dashboard()
         today = date.today().isoformat()
         theme = THEME_NAMES[self._theme_idx % len(THEME_NAMES)]
 
@@ -304,24 +304,46 @@ class DevTrackApp(App):
             id="workspace-bar",
         )
 
+        # Empty panels are skipped entirely (not just shown with a hint) so
+        # a fresh workspace doesn't waste half the screen on "nothing yet"
+        # columns — the remaining panels' 1fr/2fr CSS widths fill the gap
+        # automatically since they're relative to however many siblings
+        # Horizontal/Vertical actually end up with.
+        show_todos = bool(todos)
+        show_metrics = MetricPanel.has_content(metrics, sessions, commits)
+        show_commits = bool(commits)
+        show_sessions = SessionPanel.has_content(self._wm)
+
         with TabbedContent(id="tabs", initial="tab-dashboard"):
             # ── 1 – Dashboard ─────────────────────────────────────────────────
             with TabPane("Dashboard [dim][1][/dim]", id="tab-dashboard"):
                 yield QuickCaptureBar(self._wm)
-                with Horizontal(id="dash-layout"):
-                    with Vertical(id="dash-left"):
-                        yield Static("  ○ TODOs",           classes="col-header")
-                        yield TodoPanel(self._wm)
-                    with Vertical(id="dash-center"):
-                        with Vertical(id="center-top"):
-                            yield Static("  ◈ Metrics",     classes="col-header")
-                            yield MetricPanel(metrics, mv)
-                        with Vertical(id="center-bottom"):
-                            yield Static("  ⎇ Commits",     classes="col-header")
-                            yield CommitPanel(commits)
-                    with Vertical(id="dash-right"):
-                        yield Static("  ⏱ Sessions / WIP",  classes="col-header")
-                        yield SessionPanel(self._wm)
+                if not any((show_todos, show_metrics, show_commits, show_sessions)):
+                    yield Static(
+                        "  [dim]Nothing to show yet — add a project, a todo, "
+                        "or make a commit to get started.[/dim]",
+                        classes="empty-hint",
+                    )
+                else:
+                    with Horizontal(id="dash-layout"):
+                        if show_todos:
+                            with Vertical(id="dash-left"):
+                                yield Static("  ○ TODOs", classes="col-header")
+                                yield TodoPanel(self._wm)
+                        if show_metrics or show_commits:
+                            with Vertical(id="dash-center"):
+                                if show_metrics:
+                                    with Vertical(id="center-top"):
+                                        yield Static("  ◈ Metrics", classes="col-header")
+                                        yield MetricPanel(metrics, mv, sessions, commits)
+                                if show_commits:
+                                    with Vertical(id="center-bottom"):
+                                        yield Static("  ⎇ Commits", classes="col-header")
+                                        yield CommitPanel(commits)
+                        if show_sessions:
+                            with Vertical(id="dash-right"):
+                                yield Static("  ⏱ Sessions / WIP", classes="col-header")
+                                yield SessionPanel(self._wm)
 
             # ── 2 – TODOs ─────────────────────────────────────────────────────
             with TabPane("TODOs [dim][2][/dim]", id="tab-todos"):

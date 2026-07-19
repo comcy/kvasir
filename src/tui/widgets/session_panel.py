@@ -37,6 +37,14 @@ class SessionPanel(Widget):
         except (WorkspaceError, Exception):
             return [], []
 
+    @staticmethod
+    def has_content(wm: WorkspaceManager) -> bool:
+        try:
+            store = wm.store()
+            return bool(store.all("sessions")) or bool(store.all("projects"))
+        except Exception:
+            return False
+
     def compose(self) -> ComposeResult:
         sessions, projects = self._load()
 

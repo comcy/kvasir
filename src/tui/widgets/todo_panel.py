@@ -134,6 +134,13 @@ class TodoPanel(Widget):
         super().__init__(**kwargs)
         self._wm = wm
 
+    @staticmethod
+    def has_content(wm: WorkspaceManager) -> bool:
+        try:
+            return bool(wm.store().all("todos"))
+        except Exception:
+            return False
+
     # ── data ────────────────────────────────────────────────────────────────
 
     def _load(self) -> list[dict]:

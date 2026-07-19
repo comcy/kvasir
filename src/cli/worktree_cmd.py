@@ -194,3 +194,35 @@ def log(
 
     _require_root()
     console.print(git_log_text(Path.cwd(), limit=limit))
+
+
+@app.command("diff")
+def diff(
+    staged: bool = typer.Option(False, "--staged", help="Only staged changes, not the full working diff"),
+) -> None:
+    """Show a colorized diff of uncommitted changes in the current worktree."""
+    from src.data.diff import render_patchset, staged_diff, working_diff
+
+    _require_root()
+    patchset = staged_diff(Path.cwd()) if staged else working_diff(Path.cwd())
+    if not patchset:
+        console.print("[dim]No changes.[/dim]")
+        return
+    console.print(render_patchset(patchset))
+
+
+@app.command("compare")
+def compare(
+    base: str = typer.Argument(..., help="Base branch/ref"),
+    target: str = typer.Argument(..., help="Target branch/ref"),
+) -> None:
+    """PR-style diff: what TARGET introduced since it diverged from BASE."""
+    from src.data.diff import branch_diff, render_patchset
+
+    root = _require_root()
+    patchset = branch_diff(root, base, target)
+    if not patchset:
+        console.print(f"[dim]No differences between {base} and {target}.[/dim]")
+        return
+    console.print(f"[bold]{base}...{target}[/bold]\n")
+    console.print(render_patchset(patchset))

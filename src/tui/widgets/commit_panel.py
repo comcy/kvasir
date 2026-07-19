@@ -24,6 +24,10 @@ class CommitPanel(Widget):
         super().__init__(**kwargs)
         self._commits = commits
 
+    @staticmethod
+    def has_content(commits: list[dict]) -> bool:
+        return bool(commits)
+
     def compose(self) -> ComposeResult:
         if not self._commits:
             yield Static(

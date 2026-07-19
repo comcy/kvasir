@@ -19,6 +19,7 @@ dependencies = [
     "plyer>=2",
     "pillow>=10",
     "pyperclip>=1.8",
+    "unidiff>=0.7",
     "tomli>=2; python_version < '3.11'",
 ]
 

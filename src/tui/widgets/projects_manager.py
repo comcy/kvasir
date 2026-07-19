@@ -35,8 +35,10 @@ from src.data.sessions import (
     today_start,
     worktree_seconds,
 )
+from src.data.diff import current_branch, default_branch, list_branches
 from src.tui.screens.commit_form import CommitFormScreen
 from src.tui.screens.confirm import ConfirmScreen
+from src.tui.screens.diff_view import DiffScreen
 from src.tui.screens.git_output import GitOutputScreen
 from src.tui.screens.project_form import ProjectFormScreen
 from src.tui.screens.worktree_form import WorktreeFormScreen
@@ -138,6 +140,8 @@ class ProjectsManager(Widget):
         ("p", "push",         "Push"),
         ("s", "status",       "Status"),
         ("v", "log",          "Log"),
+        ("d", "diff",         "Diff"),
+        ("b", "compare_branches", "Compare branches"),
         ("r", "reload",       "Reload"),
     ]
 
@@ -403,6 +407,26 @@ class ProjectsManager(Widget):
         branch = row.worktree.get("branch") or "(detached)"
         text = git_log_text(row.worktree["path"])
         self.app.push_screen(GitOutputScreen(f"git log — {branch}", text))
+
+    def action_diff(self) -> None:
+        row = self._selected_worktree()
+        if row is None:
+            return
+        self.app.push_screen(DiffScreen(row.worktree["path"]))
+
+    def action_compare_branches(self) -> None:
+        row = self._selected()
+        if row is None or not isinstance(row, (_ProjectRow, _WorktreeRow)):
+            self.notify("Select a project or worktree first.", severity="warning")
+            return
+        path = row.worktree["path"] if isinstance(row, _WorktreeRow) else row.project["path"]
+        branches = list_branches(path)
+        if not branches:
+            self.notify("No local branches found.", severity="warning")
+            return
+        target = default_branch(path)
+        source = current_branch(path) or target
+        self.app.push_screen(DiffScreen(path, target_branch=target, source_branch=source))
 
     def action_fetch(self) -> None:
         row = self._selected()
