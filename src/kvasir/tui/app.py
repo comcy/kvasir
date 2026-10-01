@@ -12,11 +12,13 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Footer, OptionList
 
-from kvasir.config import load_local, load_repos
+from kvasir.config import RepoConfig, load_local, load_repos
+from kvasir.new_worktree import is_bare_layout
 from kvasir.open_terminal import OpenTerminalError, open_terminal
 from kvasir.sync import fetch, pull
 from kvasir.tui.columns import DetailPanel, EntryList, RepoList
 from kvasir.tui.data import RepoRow, load_rows
+from kvasir.tui.new_worktree_screen import NewWorktreeScreen
 from kvasir.worktrees import Worktree
 
 
@@ -30,6 +32,7 @@ class KvasirApp(App):
     BINDINGS: ClassVar[list[Binding]] = [
         Binding("q", "quit", "Quit"),
         Binding("r", "reload", "Reload"),
+        Binding("n", "new_worktree", "New worktree"),
         Binding("f", "fetch_all", "Fetch"),
         Binding("p", "pull", "Pull"),
         Binding("x", "remove_worktree", "Remove"),
@@ -41,6 +44,7 @@ class KvasirApp(App):
         super().__init__()
         self.rows: list[RepoRow] = []
         self.entries: list = []
+        self._mark: tuple[str, Path] | None = None  # (repo url, new worktree path) to highlight after reload
         self.sync: dict[str, tuple[float | None, str | None]] = {}  # url -> (last fetch ts, error)
 
     def compose(self) -> ComposeResult:
@@ -103,11 +107,14 @@ class KvasirApp(App):
         repos, entries = self.query_one(RepoList), self.query_one(EntryList)
         keep_repo, keep_entry = repos.highlighted or 0, entries.highlighted or 0  # survive reloads
         keep_repo = keep_repo if keep_repo < len(rows) else 0
+        if self._mark:  # a new worktree was just created: jump to it
+            keep_repo = next((i for i, r in enumerate(rows) if r.url == self._mark[0]), keep_repo)
         repos.set_rows(rows, self.sync)
         if rows:
             with repos.prevent(OptionList.OptionHighlighted):
                 repos.highlighted = keep_repo
         self._show_entries(keep_repo if rows else None, keep_entry)
+        self._mark = None
 
     def action_remove_worktree(self) -> None:
         from kvasir.tui.remove_screen import RemoveScreen
@@ -127,9 +134,28 @@ class KvasirApp(App):
         lst.set_entries(self.entries)
         if self.entries:
             keep = keep if keep < len(self.entries) else 0
+            if self._mark:
+                keep = next((i for i, e in enumerate(self.entries)
+                             if getattr(e, "path", None) == self._mark[1]), keep)
             with lst.prevent(OptionList.OptionHighlighted):
                 lst.highlighted = keep
         self.query_one(DetailPanel).show(self.entries[keep] if self.entries else None)
+
+    def action_new_worktree(self) -> None:
+        idx = self.query_one(RepoList).highlighted
+        row = self.rows[idx] if idx is not None and idx < len(self.rows) else None
+        if row is None or row.path is None or row.view is None:
+            return self.notify("Select a readable repo first", severity="error")
+        if not is_bare_layout(row.path):
+            return self.notify("Worktrees need the Bare-Layout (.bare/); this is a normal clone", severity="error")
+        patterns = load_repos().get(row.url, RepoConfig()).branch_patterns
+
+        def done(path: Path | None) -> None:
+            if path:
+                self._mark = (row.url, path)
+                self.action_reload()
+
+        self.push_screen(NewWorktreeScreen(row.path, patterns, row.view.branches), done)
 
     def on_option_list_option_highlighted(self, ev: OptionList.OptionHighlighted) -> None:
         if ev.option_list.id == "repos":
