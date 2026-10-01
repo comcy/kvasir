@@ -23,6 +23,7 @@ class KvasirApp(App):
     BINDINGS: ClassVar[list[Binding]] = [
         Binding("q", "quit", "Quit"),
         Binding("r", "reload", "Reload"),
+        Binding("x", "remove_worktree", "Remove"),
         Binding("h", "focus_previous", "Left", show=False),
         Binding("l", "focus_next", "Right", show=False),
     ]
@@ -58,6 +59,17 @@ class KvasirApp(App):
         if rows:
             repos.highlighted = 0
         self._show_entries(0 if rows else None)
+
+    def action_remove_worktree(self) -> None:
+        from kvasir.tui.remove_screen import RemoveScreen
+        from kvasir.worktrees import Worktree
+
+        ri, ei = self.query_one(RepoList).highlighted, self.query_one(EntryList).highlighted
+        if ri is None or ei is None or ei >= len(self.entries) or not self.rows[ri].path:
+            return
+        wt = self.entries[ei]
+        if isinstance(wt, Worktree):
+            self.push_screen(RemoveScreen(self.rows[ri].path, wt), lambda changed: changed and self.action_reload())
 
     def _show_entries(self, idx: int | None) -> None:
         row = self.rows[idx] if idx is not None and idx < len(self.rows) else None
