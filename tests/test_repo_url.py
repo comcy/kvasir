@@ -20,3 +20,7 @@ def test_nested_path():
 def test_rejects_local_path():
     with pytest.raises(ValueError):
         normalize("/home/cy/repo")
+
+
+def test_file_url():
+    assert normalize("file:///tmp/x/r.git") == "/tmp/x/r"

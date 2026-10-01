@@ -2,7 +2,7 @@
 import re
 
 _SCP = re.compile(r"^(?:[^@/]+@)?(?P<host>[^:/]+):(?P<path>(?!//).+)$")
-_URL = re.compile(r"^[a-z][a-z0-9+.-]*://(?:[^@/]+@)?(?P<host>[^:/]+)(?::\d+)?/(?P<path>.+)$", re.IGNORECASE)
+_URL = re.compile(r"^[a-z][a-z0-9+.-]*://(?:[^@/]+@)?(?P<host>[^:/]*)(?::\d+)?/(?P<path>.+)$", re.IGNORECASE)
 
 
 def normalize(url: str) -> str:

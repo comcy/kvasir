@@ -5,6 +5,7 @@ from typing import Annotated
 import typer
 
 from kvasir import __version__
+from kvasir.clone import clone_bare
 from kvasir.config import (
     DEFAULT_FETCH_MINUTES,
     DEFAULT_PATTERNS,
@@ -31,18 +32,32 @@ def version() -> None:
     print(__version__)
 
 
+def _is_url(arg: str) -> bool:
+    if Path(arg).exists():
+        return False
+    try:
+        normalize(arg)
+    except ValueError:
+        return False
+    return True
+
+
 @app.command()
 def setup(
-    path: Annotated[Path, typer.Argument(help="Any path inside the repo to register")] = Path("."),
+    path: Annotated[str, typer.Argument(help="Repo URL to clone, or any path inside a repo to register")] = ".",
+    target: Annotated[Path | None, typer.Argument(help="Clone target dir (URL mode; default: repo name)")] = None,
     pattern: Annotated[
         list[str] | None,
         typer.Option("--pattern", "-p", help="Branch name template, repeatable. Placeholders: {type} {id} {slug} {date}"),
     ] = None,
     fetch_interval: Annotated[int | None, typer.Option(help="Minutes between fetches")] = None,
 ) -> None:
-    """Register an existing repo (bare layout or normal clone)."""
+    """Clone a URL into the bare layout and register it, or register an existing repo."""
     try:
-        info = repo_info(path)
+        if _is_url(path):
+            path = str(clone_bare(path, target))
+            typer.echo(f"Cloned into {path}")
+        info = repo_info(Path(path))
     except ValueError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(1)
