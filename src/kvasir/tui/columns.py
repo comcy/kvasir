@@ -17,12 +17,17 @@ def counts(w: Worktree) -> str:
 
 
 class RepoList(OptionList):
-    def set_rows(self, rows: list[RepoRow]) -> None:
+    def set_rows(self, rows: list[RepoRow], sync: dict[str, tuple[float | None, str | None]] | None = None) -> None:
+        """`sync`: url -> (last fetch unix ts, fetch error)."""
         self.clear_options()
         for r in rows:
             if r.view:
-                info = f"{len(r.view.worktrees)} wt, {r.dirty} dirty"
-                self.add_option(_line(f"{r.url}  {info}"))
+                ts, err = (sync or {}).get(r.url, (None, None))
+                info = f"{len(r.view.worktrees)} wt, {r.dirty} dirty, fetched {format_age(ts)}"
+                if err:
+                    self.add_option(_line(f"{r.url}  {info}  [fetch failed: {err}]", "yellow"))
+                else:
+                    self.add_option(_line(f"{r.url}  {info}"))
             else:
                 self.add_option(_line(f"{r.url}  [{r.error}]", "red"))
 

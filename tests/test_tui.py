@@ -58,6 +58,32 @@ def test_app_selecting_repo_loads_middle_column(make_repo):
     asyncio.run(run())
 
 
+def test_app_f_fetches_and_shows_last_fetch(make_repo):
+    root = make_repo("a", bare_layout=True)
+    subprocess.run(["git", "-C", str(root), "worktree", "add", "-q", "main", "main"], check=True)
+    save_repos({"github.com/o/a": RepoConfig()})
+    save_local(LocalConfig(paths={"github.com/o/a": str(root)}))
+
+    async def run():
+        app = KvasirApp()
+        async with app.run_test(size=(80, 15)) as pilot:
+            for _ in range(50):
+                await pilot.pause(0.1)
+                if app.rows:
+                    break
+            assert "fetched -" in str(app.query_one(RepoList).get_option_at_index(0).prompt)
+            await pilot.press("f")  # origin is a bad URL: error shown, no crash
+            for _ in range(100):
+                await pilot.pause(0.1)
+                if "github.com/o/a" in app.sync:
+                    break
+            await pilot.pause(0.5)
+            assert app.sync["github.com/o/a"][1]
+            assert "fetch failed" in str(app.query_one(RepoList).get_option_at_index(0).prompt)
+
+    asyncio.run(run())
+
+
 def test_enter_opens_terminal_or_hints(make_repo, monkeypatch):
     root = _register(make_repo)
     opened = []
