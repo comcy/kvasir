@@ -38,7 +38,7 @@ Danach: Tagesauswertung → Vault (`vault_path`), Metriken.
 
 ## Umsetzung: GitHub Issues
 
-Abschnitt 1 (Konfiguration, `setup` für bestehende Repos) ist umgesetzt. Rest als Issues, alle `ready-for-agent`:
+Umgesetzt: #1 bis #8 und #10 (gemergt). Offen: #9 (Notizen). Alle als Issues, `ready-for-agent`:
 
 | # | Thema | Abhängig von |
 |---|---|---|

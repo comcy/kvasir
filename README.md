@@ -2,7 +2,7 @@
 
 Terminal-Tool für **Git-Worktrees**: Überblick über mehrere Repos, schnell wechseln, neue Worktrees anlegen, sicher aufräumen. Läuft auf Linux, macOS und Windows. Befehle: `kvasir` oder kurz `kv`.
 
-> **Status:** früh. Verfügbar sind `setup` (Repo registrieren / Bare-Klon) und die lesende TUI. Wechseln, Anlegen, Entfernen, Fetch/Pull und Notizen sind als Issues geplant, siehe [`PLAN.md`](./PLAN.md).
+> **Status:** früh, aber nutzbar. `setup`, die TUI mit Terminal öffnen, Worktree anlegen, entfernen sowie Fetch/Pull sind da. Notizen folgen, siehe [`PLAN.md`](./PLAN.md). Unter Windows noch nicht getestet.
 
 ## Voraussetzungen
 
@@ -91,8 +91,15 @@ Drei Spalten, von links nach rechts verfeinert: **Repos → Worktrees/Branches �
 |---|---|
 | `↑` `↓` | Auswahl |
 | `h` / `l` | Spalte links / rechts |
+| `Enter` | Terminal im Worktree öffnen (`open_command`) |
+| `n` | Neuen Worktree anlegen (bestehender oder neuer Branch, Namensprüfung) |
+| `x` | Worktree entfernen (verweigert bei ungesicherter Arbeit) |
+| `f` | Alle Repos jetzt fetchen (`git fetch --prune`) |
+| `p` | Markierten Worktree pullen (`--ff-only`, nie Merge/Rebase) |
 | `r` | Neu laden |
 | `q` | Beenden |
+
+Fetch läuft zusätzlich im eingestellten Intervall, solange die TUI offen ist. Pull passiert nie automatisch.
 
 Pro Worktree zeigt kvasir Branch, Alter und Betreff des letzten Commits, zuletzt aktive Zeit, Anzahl staged / unstaged / untracked Dateien sowie ahead/behind.
 
