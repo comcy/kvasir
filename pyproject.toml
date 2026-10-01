@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kvasir"
+version = "0.0.1"
+description = "TUI for managing Git worktrees across repos."
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12",
+    "textual>=0.60",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+kvasir = "kvasir.cli:app"
+kv = "kvasir.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kvasir"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
