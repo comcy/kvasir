@@ -36,6 +36,23 @@ Terminal-Tool für **Git-Worktrees**: Überblick über mehrere Repos, schnelles 
 
 Danach: Tagesauswertung → Vault (`vault_path`), Metriken.
 
+## Umsetzung: GitHub Issues
+
+Abschnitt 1 (Konfiguration, `setup` für bestehende Repos) ist umgesetzt. Rest als Issues, alle `ready-for-agent`:
+
+| # | Thema | Abhängig von |
+|---|---|---|
+| 1 | `setup <url>`: Bare-Klon | – |
+| 2 | Worktrees/Branches lesen (Datenmodell) | – |
+| 3 | TUI Drei-Spalten (lesen) | 2 |
+| 4 | Terminal öffnen (`Enter`) | 3 |
+| 5 | Branch-Vorlagen: Prüfung/Namensbau | – |
+| 6 | Neuen Worktree anlegen | 3, 5 |
+| 7 | Worktree entfernen (sicher) | 3 |
+| 8 | Fetch-Intervall + manuelles Pull | 3 |
+| 9 | Notizen | 3, 7 |
+| 10 | `setup`: interaktive Rückfragen | – |
+
 ## Teststrategie
 
 Pro Abschnitt ein Test gegen ein Wegwerf-Repo (`tempfile`, echtes `git`). Windows-Verhalten (`wt.exe`, Pfade) prüft der Nutzer manuell.
