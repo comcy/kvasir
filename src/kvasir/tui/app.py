@@ -9,8 +9,11 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Footer, OptionList
 
+from kvasir.config import load_local
+from kvasir.open_terminal import OpenTerminalError, open_terminal
 from kvasir.tui.columns import DetailPanel, EntryList, RepoList
 from kvasir.tui.data import RepoRow, load_rows
+from kvasir.worktrees import Worktree
 
 
 class KvasirApp(App):
@@ -73,3 +76,17 @@ class KvasirApp(App):
             self._show_entries(ev.option_index)
         elif ev.option_list.id == "entries":
             self.query_one(DetailPanel).show(self.entries[ev.option_index])
+
+    def on_option_list_option_selected(self, ev: OptionList.OptionSelected) -> None:
+        """Enter on an entry: open a terminal in the Worktree."""
+        if ev.option_list.id != "entries":
+            return
+        entry = self.entries[ev.option_index]
+        if not isinstance(entry, Worktree) or entry.broken:
+            self.notify("Kein Worktree: neuen Worktree anlegen (n).", severity="warning")
+            return
+        try:
+            open_terminal(entry.path, load_local().open_command)
+        except OpenTerminalError as e:
+            self.copy_to_clipboard(str(entry.path))
+            self.notify(f"{e}\nPfad in Zwischenablage: {entry.path}", severity="error", timeout=15)
