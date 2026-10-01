@@ -38,7 +38,7 @@ Danach: Tagesauswertung → Vault (`vault_path`), Metriken.
 
 ## Umsetzung: GitHub Issues
 
-Umgesetzt: #1 bis #8 und #10 (gemergt). Offen: #9 (Notizen). Alle als Issues, `ready-for-agent`:
+Umgesetzt: alle Issues #1 bis #10 (gemergt):
 
 | # | Thema | Abhängig von |
 |---|---|---|
