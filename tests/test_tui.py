@@ -55,3 +55,34 @@ def test_app_selecting_repo_loads_middle_column(make_repo):
             assert "nicht gefunden" in str(repos.get_option_at_index(1).prompt)
 
     asyncio.run(run())
+
+
+def test_new_worktree_dialog(make_repo):
+    from textual.widgets import Input, Label
+
+    root = _register(make_repo)
+
+    async def run():
+        app = KvasirApp()
+        async with app.run_test(size=(100, 40)) as pilot:
+            for _ in range(50):
+                await pilot.pause(0.1)
+                if app.rows:
+                    break
+            await pilot.press("n")
+            await pilot.pause()
+            title = app.screen.query_one("#title", Input)
+            title.value = "Cool thing"
+            title.focus()
+            await pilot.pause()
+            assert "feat/cool-thing" in str(app.screen.query_one("#name", Label).render())
+            await pilot.press("enter")
+            for _ in range(50):
+                await pilot.pause(0.1)
+                if (root / "feat" / "cool-thing").is_dir() and len(app.entries) == 2:
+                    break
+            assert (root / "feat" / "cool-thing").is_dir()
+            hl = app.query_one(EntryList).highlighted
+            assert getattr(app.entries[hl], "branch", None) == "feat/cool-thing"
+
+    asyncio.run(run())
