@@ -35,22 +35,31 @@ class RepoList(OptionList):
 class EntryList(OptionList):
     """Middle column: Worktrees, then Branches without Worktree."""
 
-    def set_entries(self, entries: list[Worktree | Branch]) -> None:
+    def set_entries(self, entries: list[Worktree | Branch], notes: dict[str, dict] | None = None) -> None:
+        """`notes`: branch -> newest note, shown shortened at the end of the line."""
         self.clear_options()
         for e in entries:
+            n = (notes or {}).get(getattr(e, "branch", None) or getattr(e, "name", ""))
+            tail = f"  ✎ {n['text'][:30]}" if n else ""
             if isinstance(e, Worktree):
                 if e.broken:
                     self.add_option(_line(f"! {e.branch or e.path.name}  [defekt: {e.broken}]", "red"))
                 else:
                     self.add_option(_line(
-                        f"{e.branch or '(detached)'}  {format_age(e.commit_ts)}  {counts(e)}  {e.subject}"
+                        f"{e.branch or '(detached)'}  {format_age(e.commit_ts)}  {counts(e)}  {e.subject}{tail}"
                     ))
             else:
-                self.add_option(_line(f"{e.name}  {format_age(e.commit_ts)}  {e.subject}", "dim"))
+                self.add_option(_line(f"{e.name}  {format_age(e.commit_ts)}  {e.subject}{tail}", "dim"))
 
 
 class DetailPanel(Static):
-    def show(self, item: Worktree | Branch | None) -> None:
+    def show(self, item: Worktree | Branch | None, note: dict | None = None) -> None:
+        self._show(item)
+        if note:
+            kind = "closing note" if note["kind"] == "closing" else "note"
+            self.update(Text.assemble(self.content, f"\n\n{kind} ({note['ts'][:10]}):\n{note['text']}"))
+
+    def _show(self, item: Worktree | Branch | None) -> None:
         if item is None:
             self.update("")
         elif isinstance(item, Branch):

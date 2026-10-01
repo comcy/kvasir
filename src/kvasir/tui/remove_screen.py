@@ -10,12 +10,9 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Input, Static
 
+from kvasir import notes
 from kvasir import remove_worktree as rw
 from kvasir.worktrees import Worktree
-
-
-def before_remove(wt: Worktree) -> None:
-    """HOOK for #9: note prompt before removal. Intentionally empty."""
 
 
 class RemoveScreen(ModalScreen[bool]):
@@ -30,13 +27,13 @@ class RemoveScreen(ModalScreen[bool]):
         Binding("n", "cancel", "No", show=False),
     ]
 
-    def __init__(self, root: Path, wt: Worktree) -> None:
+    def __init__(self, root: Path, wt: Worktree, url: str = "") -> None:
         super().__init__()
-        self.root, self.wt = root, wt
+        self.root, self.wt, self.url = root, wt, url
         self.label = wt.branch or wt.path.name
         self.changed = False
         self.risks = rw.Risks()
-        self.phase = "remove"  # remove | branch | prune | blocked
+        self.phase = "remove"  # remove | note | branch | prune | blocked
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -75,12 +72,14 @@ class RemoveScreen(ModalScreen[bool]):
 
     def action_confirm(self) -> None:
         if self.phase == "remove" and not self.risks.dangerous:
-            self._remove(force=False)
+            self._ask_note(force=False)
 
     def on_input_submitted(self, ev: Input.Submitted) -> None:
-        if self.phase == "remove" and ev.value == self.label:
+        if self.phase == "note":
+            self._remove(self.force, ev.value.strip())
+        elif self.phase == "remove" and ev.value == self.label:
             self.query_one(Input).display, self.query_one(Input).disabled = False, True
-            self._remove(force=True)
+            self._ask_note(force=True)
 
     def action_yes(self) -> None:
         try:
@@ -94,8 +93,19 @@ class RemoveScreen(ModalScreen[bool]):
             self._say(f"failed: {e}\n\n[esc]")
             self.phase = "blocked"
 
-    def _remove(self, force: bool) -> None:
-        before_remove(self.wt)
+    def _ask_note(self, force: bool) -> None:
+        """Closing note prompt; esc cancels the whole removal, so nothing is saved."""
+        self.force, self.phase = force, "note"
+        inp = self.query_one(Input)
+        inp.value, inp.placeholder = "", "closing note (empty = skip)"
+        inp.display, inp.disabled = True, False
+        inp.focus()
+        self._say(f"Was war der Stand? ({self.label})\n\n[enter] save note + remove  [esc] cancel")
+
+    def _remove(self, force: bool, note: str = "") -> None:
+        self.query_one(Input).disabled = True
+        if note:
+            notes.add(self.url, self.wt.branch or self.wt.path.name, note, "closing")
         try:
             rw.remove(self.root, self.wt.path, force)
         except RuntimeError as e:

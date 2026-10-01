@@ -79,7 +79,7 @@ def test_prune(repo):
     assert all(w.path.name != "feat-x" for w in read_repo(repo).worktrees)
 
 
-def _run(repo, w, keys):
+def _run(repo, w, keys, url=""):
     async def go():
         from textual.app import App
 
@@ -88,7 +88,7 @@ def _run(repo, w, keys):
 
         app = A()
         async with app.run_test() as pilot:
-            await app.push_screen(RemoveScreen(repo, w))
+            await app.push_screen(RemoveScreen(repo, w, url))
             await pilot.pause()
             for k in keys:
                 await pilot.press(*k) if isinstance(k, list) else await pilot.press(k)
@@ -97,14 +97,14 @@ def _run(repo, w, keys):
 
 
 def test_screen_clean_merged_removes_and_deletes_branch(repo):
-    _run(repo, wt(repo, "feat-x"), ["enter", "y"])
+    _run(repo, wt(repo, "feat-x"), ["enter", "enter", "y"])
     assert not (repo / "feat-x").exists()
     assert "feat/x" not in branches(repo)
 
 
 def test_screen_unmerged_no_branch_question(repo):
     commit(repo / "feat-x")
-    _run(repo, wt(repo, "feat-x"), [list("feat/x") + ["enter"], "y"])
+    _run(repo, wt(repo, "feat-x"), [list("feat/x") + ["enter"], "enter", "y"])
     assert not (repo / "feat-x").exists()
     assert "feat/x" in branches(repo)
 
@@ -113,3 +113,25 @@ def test_screen_wrong_name_keeps_worktree(repo):
     commit(repo / "feat-x")
     _run(repo, wt(repo, "feat-x"), [list("nope") + ["enter"]])
     assert (repo / "feat-x").exists()
+
+
+def test_screen_closing_note_saved_and_kept_after_removal(repo):
+    from kvasir import notes
+    _run(repo, wt(repo, "feat-x"), ["enter", list("wip") + ["enter"], "n"], url="github.com/o/r")
+    assert not (repo / "feat-x").exists()
+    n = notes.latest("github.com/o/r", "feat/x")
+    assert n["text"] == "wip" and n["kind"] == "closing"
+
+
+def test_screen_empty_closing_note_skipped(repo):
+    from kvasir import notes
+    _run(repo, wt(repo, "feat-x"), ["enter", "enter", "n"], url="github.com/o/r")
+    assert not (repo / "feat-x").exists()
+    assert notes.read_all() == []
+
+
+def test_screen_cancel_at_note_prompt_saves_nothing(repo):
+    from kvasir import notes
+    _run(repo, wt(repo, "feat-x"), ["enter", list("x") + ["escape"]], url="github.com/o/r")
+    assert (repo / "feat-x").exists()
+    assert notes.read_all() == []

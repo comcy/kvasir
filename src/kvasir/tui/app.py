@@ -12,6 +12,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Footer, OptionList
 
+from kvasir import notes
 from kvasir.config import RepoConfig, load_local, load_repos
 from kvasir.new_worktree import is_bare_layout
 from kvasir.open_terminal import OpenTerminalError, open_terminal
@@ -19,6 +20,7 @@ from kvasir.sync import fetch, pull
 from kvasir.tui.columns import DetailPanel, EntryList, RepoList
 from kvasir.tui.data import RepoRow, load_rows
 from kvasir.tui.new_worktree_screen import NewWorktreeScreen
+from kvasir.tui.note_screen import NoteScreen
 from kvasir.worktrees import Worktree
 
 
@@ -36,6 +38,7 @@ class KvasirApp(App):
         Binding("f", "fetch_all", "Fetch"),
         Binding("p", "pull", "Pull"),
         Binding("x", "remove_worktree", "Remove"),
+        Binding("m", "note", "Note"),
         Binding("h", "focus_previous", "Left", show=False),
         Binding("l", "focus_next", "Right", show=False),
     ]
@@ -125,13 +128,13 @@ class KvasirApp(App):
             return
         wt = self.entries[ei]
         if isinstance(wt, Worktree):
-            self.push_screen(RemoveScreen(self.rows[ri].path, wt), lambda changed: changed and self.action_reload())
+            self.push_screen(RemoveScreen(self.rows[ri].path, wt, self.rows[ri].url), lambda changed: changed and self.action_reload())
 
     def _show_entries(self, idx: int | None, keep: int = 0) -> None:
         row = self.rows[idx] if idx is not None and idx < len(self.rows) else None
         self.entries = [*row.view.worktrees, *row.view.branches] if row and row.view else []
         lst = self.query_one(EntryList)
-        lst.set_entries(self.entries)
+        lst.set_entries(self.entries, notes.latest_by_branch(row.url) if row else {})
         if self.entries:
             keep = keep if keep < len(self.entries) else 0
             if self._mark:
@@ -139,7 +142,30 @@ class KvasirApp(App):
                              if getattr(e, "path", None) == self._mark[1]), keep)
             with lst.prevent(OptionList.OptionHighlighted):
                 lst.highlighted = keep
-        self.query_one(DetailPanel).show(self.entries[keep] if self.entries else None)
+        self._show_detail(self.entries[keep] if self.entries else None)
+
+    def _show_detail(self, item) -> None:
+        ri = self.query_one(RepoList).highlighted
+        url = self.rows[ri].url if ri is not None and ri < len(self.rows) else ""
+        name = getattr(item, "branch", None) or getattr(item, "name", None)
+        self.query_one(DetailPanel).show(item, notes.latest(url, name) if name else None)
+
+    def action_note(self) -> None:
+        ri, ei = self.query_one(RepoList).highlighted, self.query_one(EntryList).highlighted
+        if ri is None or ei is None or ei >= len(self.entries):
+            return
+        url, item = self.rows[ri].url, self.entries[ei]
+        name = getattr(item, "branch", None) or getattr(item, "name", None)
+        if not name:
+            return self.notify("no branch to note", severity="warning")
+        old = notes.latest(url, name)
+
+        def done(text: str | None) -> None:
+            if text:
+                notes.add(url, name, text)
+                self._show_entries(ri, ei)
+
+        self.push_screen(NoteScreen(name, old["text"] if old else ""), done)
 
     def action_new_worktree(self) -> None:
         idx = self.query_one(RepoList).highlighted
@@ -161,7 +187,7 @@ class KvasirApp(App):
         if ev.option_list.id == "repos":
             self._show_entries(ev.option_index)
         elif ev.option_list.id == "entries":
-            self.query_one(DetailPanel).show(self.entries[ev.option_index])
+            self._show_detail(self.entries[ev.option_index])
 
     def on_option_list_option_selected(self, ev: OptionList.OptionSelected) -> None:
         """Enter on an entry: open a terminal in the Worktree."""
