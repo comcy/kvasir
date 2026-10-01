@@ -5,6 +5,7 @@ from kvasir.config import LocalConfig, RepoConfig, save_local, save_repos
 from kvasir.tui.app import KvasirApp
 from kvasir.tui.columns import DetailPanel, EntryList, RepoList
 from kvasir.tui.data import format_age, load_rows
+from kvasir.worktrees import Branch
 
 
 def test_format_age():
@@ -53,6 +54,60 @@ def test_app_selecting_repo_loads_middle_column(make_repo):
             await pilot.pause()
             assert entries.option_count == 0
             assert "nicht gefunden" in str(repos.get_option_at_index(1).prompt)
+
+    asyncio.run(run())
+
+
+def test_app_f_fetches_and_shows_last_fetch(make_repo):
+    root = make_repo("a", bare_layout=True)
+    subprocess.run(["git", "-C", str(root), "worktree", "add", "-q", "main", "main"], check=True)
+    save_repos({"github.com/o/a": RepoConfig()})
+    save_local(LocalConfig(paths={"github.com/o/a": str(root)}))
+
+    async def run():
+        app = KvasirApp()
+        async with app.run_test(size=(80, 15)) as pilot:
+            for _ in range(50):
+                await pilot.pause(0.1)
+                if app.rows:
+                    break
+            assert "fetched -" in str(app.query_one(RepoList).get_option_at_index(0).prompt)
+            await pilot.press("f")  # origin is a bad URL: error shown, no crash
+            for _ in range(100):
+                await pilot.pause(0.1)
+                if "github.com/o/a" in app.sync:
+                    break
+            await pilot.pause(0.5)
+            assert app.sync["github.com/o/a"][1]
+            assert "fetch failed" in str(app.query_one(RepoList).get_option_at_index(0).prompt)
+
+    asyncio.run(run())
+
+
+def test_enter_opens_terminal_or_hints(make_repo, monkeypatch):
+    root = _register(make_repo)
+    opened = []
+    monkeypatch.setattr("kvasir.tui.app.open_terminal", lambda p, t: opened.append(p))
+
+    async def run():
+        app = KvasirApp()
+        notes = []
+        monkeypatch.setattr(app, "notify", lambda msg, **kw: notes.append(msg))
+        async with app.run_test(size=(80, 15)) as pilot:
+            for _ in range(50):
+                await pilot.pause(0.1)
+                if app.rows:
+                    break
+            await pilot.press("l", "enter")  # Worktree main
+            await pilot.pause()
+            assert opened == [root / "main"] and not notes
+            app.entries.append(Branch("feat/x", False, None, ""))
+            entries = app.query_one(EntryList)
+            entries.add_option("x")
+            entries.highlighted = 1
+            await pilot.press("enter")
+            await pilot.pause()
+            assert len(opened) == 1 and "Worktree" in notes[0]
 
     asyncio.run(run())
 
