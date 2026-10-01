@@ -21,7 +21,10 @@ Arbeit kommt aus GitHub Issues (`ready-for-agent`). Pläne/Entscheidungen: `PLAN
 3. **Umsetzen:** Akzeptanzkriterien des Issues abarbeiten. Kleinste Lösung, die sie erfüllt; keine Features darüber hinaus. Pro Kriterium Test (Pytest, Wegwerf-Repos, siehe `tests/conftest.py`).
 4. **Prüfen:** `.venv/bin/pytest -q` und `.venv/bin/ruff check src tests` müssen grün sein. Neues venv im Worktree: `python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'`.
 5. **Commit:** Conventional Commits, Autor `christian.silfang@gmail.com`, vorher auf Secrets prüfen.
-6. **PR:** nur den Feature-Branch pushen, `gh pr create` gegen `main`, Beschreibung mit `Closes #<nr>`, Liste der erfüllten Kriterien, offene/manuelle Punkte (z. B. Windows). Nicht selbst mergen, `main` nie direkt pushen.
+6. **PR:** nur den Feature-Branch pushen, `gh pr create` gegen `main`, Beschreibung mit `Closes #<nr>`, Liste der erfüllten Kriterien, offene/manuelle Punkte (z. B. Windows). Code-Änderungen nie direkt auf `main` pushen (reine Doku-Änderungen nur auf ausdrückliche Anweisung des Nutzers).
+   - **Review:** Der PR wird vom Hauptagenten (nicht vom Autor-Agenten) geprüft: Feature-Branches auf `origin/main` zusammenführen, `pytest` + `ruff` laufen lassen, Diff lesen.
+   - **Merge:** Der Hauptagent darf per `gh pr merge --squash` selbst mergen, wenn Tests und `ruff` grün sind, das Review keine Blocker ergibt und die Akzeptanzkriterien erfüllt sind. Danach Feature-Branch (remote und lokal) und Worktree löschen. Nicht gemergt wird bei Blockern, offenen Fragen oder rotem CI; dann Nutzer informieren.
+   - **Freigabe:** Die Merge-Erlaubnis gilt nur, weil der Nutzer sie am 2026-10-02 einmalig ausdrücklich erteilt hat (nachdem der Agent gefragt hat). Bevor ein Agent in einem anderen Projekt oder ohne diese Notiz selbst mergt, muss er den Nutzer einmal fragen und die Zustimmung abwarten.
 7. **Unklar oder widersprüchlich:** kein Raten. Am Issue kommentieren, Label `needs-info` setzen und das nächste unabhängige Issue nehmen.
 
 Plattformen: Linux, macOS, Windows. Keine Shell-Strings für Prozessaufrufe (Argumentlisten), Pfade mit `pathlib`.
