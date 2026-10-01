@@ -130,3 +130,11 @@ def setup(
 
     layout = "bare layout" if info.bare_layout else "normal clone (overview only)"
     typer.echo(f"{'Updated' if known else 'Registered'} {url} [{layout}] at {info.root}")
+
+
+@app.command()
+def tui() -> None:
+    """Open the three-column overview (read-only)."""
+    from kvasir.tui.app import KvasirApp
+
+    KvasirApp().run()
