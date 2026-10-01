@@ -13,6 +13,7 @@ from textual.containers import Horizontal
 from textual.widgets import Footer, OptionList
 
 from kvasir.config import load_local, load_repos
+from kvasir.open_terminal import OpenTerminalError, open_terminal
 from kvasir.sync import fetch, pull
 from kvasir.tui.columns import DetailPanel, EntryList, RepoList
 from kvasir.tui.data import RepoRow, load_rows
@@ -31,6 +32,7 @@ class KvasirApp(App):
         Binding("r", "reload", "Reload"),
         Binding("f", "fetch_all", "Fetch"),
         Binding("p", "pull", "Pull"),
+        Binding("x", "remove_worktree", "Remove"),
         Binding("h", "focus_previous", "Left", show=False),
         Binding("l", "focus_next", "Right", show=False),
     ]
@@ -107,6 +109,17 @@ class KvasirApp(App):
                 repos.highlighted = keep_repo
         self._show_entries(keep_repo if rows else None, keep_entry)
 
+    def action_remove_worktree(self) -> None:
+        from kvasir.tui.remove_screen import RemoveScreen
+        from kvasir.worktrees import Worktree
+
+        ri, ei = self.query_one(RepoList).highlighted, self.query_one(EntryList).highlighted
+        if ri is None or ei is None or ei >= len(self.entries) or not self.rows[ri].path:
+            return
+        wt = self.entries[ei]
+        if isinstance(wt, Worktree):
+            self.push_screen(RemoveScreen(self.rows[ri].path, wt), lambda changed: changed and self.action_reload())
+
     def _show_entries(self, idx: int | None, keep: int = 0) -> None:
         row = self.rows[idx] if idx is not None and idx < len(self.rows) else None
         self.entries = [*row.view.worktrees, *row.view.branches] if row and row.view else []
@@ -123,3 +136,17 @@ class KvasirApp(App):
             self._show_entries(ev.option_index)
         elif ev.option_list.id == "entries":
             self.query_one(DetailPanel).show(self.entries[ev.option_index])
+
+    def on_option_list_option_selected(self, ev: OptionList.OptionSelected) -> None:
+        """Enter on an entry: open a terminal in the Worktree."""
+        if ev.option_list.id != "entries":
+            return
+        entry = self.entries[ev.option_index]
+        if not isinstance(entry, Worktree) or entry.broken:
+            self.notify("Kein Worktree: neuen Worktree anlegen (n).", severity="warning")
+            return
+        try:
+            open_terminal(entry.path, load_local().open_command)
+        except OpenTerminalError as e:
+            self.copy_to_clipboard(str(entry.path))
+            self.notify(f"{e}\nPfad in Zwischenablage: {entry.path}", severity="error", timeout=15)
