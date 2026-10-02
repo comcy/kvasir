@@ -70,6 +70,17 @@ kvasir tui
 kvasir setup ~/Workspace/mein-repo -p "features/{id}-{slug}" -p "fixes/{id}-{slug}" --fetch-interval 30
 ```
 
+Einstellungen später ändern:
+
+```bash
+kvasir setup ~/Workspace/mein-repo --reconfigure           # fragt Vorlagen, Fetch- und Plattform-Intervall erneut ab (Enter = aktueller Wert)
+kvasir setup ~/Workspace/mein-repo --reconfigure --platform-interval 5   # ohne Rückfragen (auch ohne Terminal)
+kvasir config          # Konfigurationsverzeichnis, repos.toml und local.toml anzeigen
+kvasir config --path   # nur das Verzeichnis
+```
+
+`--platform-interval` (Minuten) steuert, wie oft PRs, Work Items und Pipelines aktualisiert werden. Ungültige Vorlagen werden abgelehnt. Änderungen gelten nach `r` in der TUI bzw. beim nächsten Start, bestehende Branches bleiben unberührt.
+
 Nur registrierte Repos erscheinen in der Übersicht. Repos ohne `origin`-Remote werden (noch) nicht unterstützt.
 
 ### Bare-Layout

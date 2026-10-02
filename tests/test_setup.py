@@ -108,3 +108,10 @@ def test_no_prompts_for_known_entry_or_options_or_no_tty(make_repo, monkeypatch)
     assert ask(str(r3), input="").exit_code == 0
     assert load_repos()["github.com/o/r3"] == RepoConfig()
     assert load_local().open_command is None
+
+
+def test_setup_rejects_invalid_pattern(make_repo):
+    root = make_repo()
+    r = run(str(root), "-p", "feat/{nope}")
+    assert r.exit_code == 1
+    assert load_repos() == {}  # nothing registered
