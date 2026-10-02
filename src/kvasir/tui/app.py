@@ -11,6 +11,7 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.timer import Timer
 from textual.widgets import Footer, OptionList, Static
 
 from kvasir import notes
@@ -53,6 +54,7 @@ class KvasirApp(App):
         Binding("b", "toggle_remote", "Remote"),
         Binding("u", "refresh_platform", "GitHub"),
         Binding("i", "overview", "Overview"),
+        Binding("e", "edit_repo", "Edit"),
         Binding("h", "focus_previous", "Left", show=False),
         Binding("l", "focus_next", "Right", show=False),
     ]
@@ -68,6 +70,7 @@ class KvasirApp(App):
         self._platform_error: dict[str, Error | None] = {}
         self._platform_busy: set[str] = set()
         self._platform_started = False
+        self._intervals: dict[tuple[str, str], Timer] = {}  # ("fetch"|"gh", url) -> interval timer, replaceable
 
     def compose(self) -> ComposeResult:
         yield Static("", id="header")
@@ -107,7 +110,38 @@ class KvasirApp(App):
         paths = load_local().paths
         for url, cfg in load_repos().items():  # timers live only as long as the TUI
             if url in paths:
-                self.set_interval(max(1, cfg.fetch_interval) * 60, partial(self._fetch_repo, url, Path(paths[url])))
+                self._timer("fetch", url, cfg.fetch_interval, partial(self._fetch_repo, url, Path(paths[url])))
+
+    def _timer(self, kind: str, url: str, minutes: int, callback) -> None:
+        if old := self._intervals.pop((kind, url), None):
+            old.stop()
+        self._intervals[(kind, url)] = self.set_interval(max(1, minutes) * 60, callback)
+
+    def action_edit_repo(self) -> None:
+        from kvasir.tui.settings_screen import SettingsScreen
+
+        ri = self.query_one(RepoList).highlighted
+        row = self.rows[ri] if ri is not None and ri < len(self.rows) else None
+        if row is None:
+            return self.notify("Select a repo first", severity="warning")
+        try:
+            cfg = load_repos().get(row.url)
+        except (OSError, ValueError) as e:  # unreadable/invalid repos.toml: hint instead of crash
+            return self.notify(f"repos.toml not readable: {e}", severity="error")
+        if cfg is None:
+            return self.notify("Repo not registered in repos.toml", severity="error")
+
+        def done(saved: RepoConfig | None) -> None:
+            if saved is None:
+                return
+            paths = load_local().paths
+            if row.url in paths:
+                self._timer("fetch", row.url, saved.fetch_interval, partial(self._fetch_repo, row.url, Path(paths[row.url])))
+            if platform_data.platform_of(row.url):
+                self._timer("gh", row.url, saved.platform_interval, partial(self._refresh_platform_url, row.url))
+            self.action_reload()  # config is read per use; reload redraws with the new templates
+
+        self.push_screen(SettingsScreen(row.url, tilde(row.path) if row.path else "", cfg), done)
 
     def action_fetch_all(self) -> None:
         paths = load_local().paths
@@ -134,7 +168,7 @@ class KvasirApp(App):
             if platform_data.platform_of(row.url):
                 self._refresh_platform_url(row.url)
                 minutes = max(1, cfgs.get(row.url, RepoConfig()).platform_interval)
-                self.set_interval(minutes * 60, partial(self._refresh_platform_url, row.url))
+                self._timer("gh", row.url, minutes, partial(self._refresh_platform_url, row.url))
 
     def action_refresh_platform(self) -> None:
         urls = [r.url for r in self.rows if platform_data.platform_of(r.url)]
