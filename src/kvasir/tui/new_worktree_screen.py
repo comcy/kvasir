@@ -22,7 +22,7 @@ class NewWorktreeScreen(ModalScreen["Path | None"]):
     DEFAULT_CSS = """
     NewWorktreeScreen { align: center middle; }
     #dialog { width: 70; max-width: 95%; height: auto; max-height: 95%; padding: 1 2;
-              border: thick $primary; background: $surface; overflow-y: auto; }
+              border: round $accent; border-title-color: $accent; border-title-style: bold; background: $surface; overflow-y: auto; }
     #warn { color: $warning; }
     #error { color: $error; }
     """
@@ -39,7 +39,6 @@ class NewWorktreeScreen(ModalScreen["Path | None"]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
-            yield Label("New worktree")
             yield Select([("(new branch)", NEW), *((b.name, b.name) for b in self.branches)],
                          value=NEW, allow_blank=False, id="branch")
             with Vertical(id="new"):
@@ -74,6 +73,7 @@ class NewWorktreeScreen(ModalScreen["Path | None"]):
         self.query_one("#error", Label).update("")
 
     def on_mount(self) -> None:
+        self.query_one("#dialog").border_title = "New worktree"
         self._update()
 
     def on_select_changed(self, _ev: Select.Changed) -> None:

@@ -1,12 +1,24 @@
 """One small widget per column. Detail panel is swappable: anything with `show(item)`."""
 from __future__ import annotations
 
+from typing import ClassVar
+
 from rich.text import Text
+from textual.binding import Binding
 from textual.widgets import OptionList, Static
 from textual.widgets.option_list import Option
 
 from kvasir.tui.data import RepoRow, format_age
-from kvasir.tui.layout import Group, cut, entry_name, format_entry, name_width, short_name, tilde
+from kvasir.tui.layout import (
+    Group,
+    cut,
+    entry_name,
+    format_entry,
+    name_width,
+    rule,
+    short_name,
+    tilde,
+)
 from kvasir.worktrees import Branch, Worktree
 
 
@@ -70,6 +82,9 @@ class RepoList(OptionList):
 class EntryList(OptionList):
     """Middle column: grouped Entries. Headings are disabled options; `index_map` maps option -> entry index."""
 
+    # Same key/action as OptionList's own binding (so Enter fires once), but visible in the footer.
+    BINDINGS: ClassVar[list[Binding]] = [Binding("enter", "select", "Open")]
+
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.index_map: list[int | None] = []  # option index -> index into the flat entry list (None = heading)
@@ -99,8 +114,8 @@ class EntryList(OptionList):
         mw = max((len(self._marks.get(n, "")) for n in names), default=0)  # column only if any marker
         n = 0
         for gi, g in enumerate(self._groups):
-            head = ("\n" if gi else "") + cut(g.header, total)
-            self.add_option(Option(Text(head, style="bold"), disabled=True))
+            head = ("\n" if gi else "") + rule(g.header, total)
+            self.add_option(Option(Text(head, style="bold dim"), disabled=True))
             self.index_map.append(None)
             for e in g.visible:
                 note = self._notes.get(getattr(e, "branch", None) or getattr(e, "name", ""))

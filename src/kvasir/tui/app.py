@@ -6,6 +6,7 @@ from functools import partial
 from pathlib import Path
 from typing import ClassVar
 
+from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -21,7 +22,7 @@ from kvasir.sync import fetch, pull
 from kvasir.tui import platform_data, platform_view
 from kvasir.tui.columns import DetailPanel, EntryList, RepoList
 from kvasir.tui.data import RepoRow, load_rows
-from kvasir.tui.layout import group_entries, tilde
+from kvasir.tui.layout import data_status, group_entries, header_text, short_name, tilde
 from kvasir.tui.new_worktree_screen import NewWorktreeScreen
 from kvasir.tui.note_screen import NoteScreen
 from kvasir.worktrees import Worktree
@@ -30,27 +31,27 @@ from kvasir.worktrees import Worktree
 class KvasirApp(App):
     CSS = """
     Horizontal { height: 1fr; }
-    #pathbar { height: 1; padding: 0 1; color: $text-muted; }
-    .col { height: 1fr; }
-    #repos-col { width: 1fr; min-width: 30; max-width: 40; }
-    #entries-col { width: 4fr; min-width: 10; border-left: solid $primary; }
-    #detail-col { width: 2fr; min-width: 8; border-left: solid $primary; }
+    #header { height: 1; padding: 0 1; color: $text-muted; text-style: bold; }
+    .col { height: 1fr; border: round $primary-darken-2; border-title-color: $text-muted; }
+    .col:focus-within { border: round $accent; border-title-color: $accent; border-title-style: bold; }
+    #repos-col { width: 1fr; min-width: 30; max-width: 42; }
+    #entries-col { width: 4fr; min-width: 10; }
+    #detail-col { width: 2fr; min-width: 8; }
     .narrow #detail-col { display: none; }
     .narrow #repos-col { min-width: 10; }
-    .colhead { height: 1; padding: 0 1; text-style: bold; background: $boost; }
-    RepoList, EntryList { height: 1fr; padding: 0 1; }
+    RepoList, EntryList { height: 1fr; padding: 0 1; border: none; }
     DetailPanel { height: 1fr; padding: 0 1; }
     """
     BINDINGS: ClassVar[list[Binding]] = [
         Binding("q", "quit", "Quit"),
         Binding("r", "reload", "Reload"),
-        Binding("n", "new_worktree", "New worktree"),
+        Binding("n", "new_worktree", "New"),
         Binding("f", "fetch_all", "Fetch"),
         Binding("p", "pull", "Pull"),
         Binding("x", "remove_worktree", "Remove"),
         Binding("m", "note", "Note"),
-        Binding("b", "toggle_remote", "Remote branches"),
-        Binding("u", "refresh_platform", "Platform"),
+        Binding("b", "toggle_remote", "Remote"),
+        Binding("u", "refresh_platform", "GitHub"),
         Binding("i", "overview", "Overview"),
         Binding("h", "focus_previous", "Left", show=False),
         Binding("l", "focus_next", "Right", show=False),
@@ -69,24 +70,39 @@ class KvasirApp(App):
         self._platform_started = False
 
     def compose(self) -> ComposeResult:
-        yield Static("", id="pathbar")
+        yield Static("", id="header")
         with Horizontal():
             with Vertical(id="repos-col", classes="col"):
-                yield Static("Repos", classes="colhead")
                 yield RepoList(id="repos")
             with Vertical(id="entries-col", classes="col"):
-                yield Static("Worktrees & Branches", classes="colhead")
                 yield EntryList(id="entries")
             with Vertical(id="detail-col", classes="col"):
-                yield Static("Details", classes="colhead")
                 yield DetailPanel(id="detail")
-        yield Footer()
+        yield Footer(show_command_palette=False)  # the palette hint would cut the key labels at 100 columns
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """Pages on top (Overview) have their own keys; hide the main view's from their footer."""
+        return len(self.screen_stack) == 1 or action in ("quit", "focus_previous", "focus_next")
 
     def on_resize(self) -> None:
         self.set_class(self.size.width < 80, "narrow")  # no room for the Details column
+        self._update_header()
+
+    def _update_header(self) -> None:
+        ri = self.query_one(RepoList).highlighted
+        row = self.rows[ri] if ri is not None and ri < len(self.rows) else None
+        snap = self.platform.get(row.url) if row else None
+        gh = snap.fetched_at.timestamp() if snap and snap.fetched_at else None
+        status = data_status(self.sync.get(row.url, (None, None))[0], gh) if row else ""
+        text = header_text(short_name(row.url) if row else "", tilde(row.path) if row and row.path else "",
+                           status, max(1, self.size.width - 2))
+        self.query_one("#header", Static).update(Text(text, no_wrap=True, overflow="ellipsis"))
 
     def on_mount(self) -> None:
+        for col, title in (("repos", "Repos"), ("entries", "Worktrees & Branches"), ("detail", "Details")):
+            self.query_one(f"#{col}-col").border_title = title
         self.query_one(RepoList).focus()
+        self.set_interval(30, self._update_header)  # "vor 3m" keeps ticking
         self.action_reload()
         paths = load_local().paths
         for url, cfg in load_repos().items():  # timers live only as long as the TUI
@@ -200,6 +216,7 @@ class KvasirApp(App):
         if self._mark:  # a new worktree was just created: jump to it
             keep_repo = next((i for i, r in enumerate(rows) if r.url == self._mark[0]), keep_repo)
         repos.set_rows(rows, self.sync)
+        self.query_one("#repos-col").border_title = f"Repos ({len(rows)})"
         if rows:
             with repos.prevent(OptionList.OptionHighlighted):
                 repos.highlighted = keep_repo
@@ -224,7 +241,7 @@ class KvasirApp(App):
         row = self.rows[idx] if idx is not None and idx < len(self.rows) else None
         groups = group_entries(row.view, self.show_remote) if row and row.view else []
         self.entries = [e for g in groups for e in g.visible]
-        self.query_one("#pathbar", Static).update(tilde(row.path) if row and row.path else "")
+        self._update_header()
         if self.entries:
             keep = keep if keep < len(self.entries) else 0
             if self._mark:

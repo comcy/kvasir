@@ -6,7 +6,17 @@ from kvasir.config import LocalConfig, RepoConfig, save_local, save_repos
 from kvasir.tui.app import KvasirApp
 from kvasir.tui.columns import DetailPanel, EntryList, RepoList
 from kvasir.tui.data import format_age, load_rows
-from kvasir.tui.layout import fit, format_entry, group_entries, name_width, short_name, tilde
+from kvasir.tui.layout import (
+    data_status,
+    fit,
+    format_entry,
+    group_entries,
+    header_text,
+    name_width,
+    rule,
+    short_name,
+    tilde,
+)
 from kvasir.worktrees import Branch, RepoView, Worktree
 
 
@@ -185,7 +195,9 @@ def test_app_groups_skip_headings_toggle_remote_and_keep_selection(make_repo):
                     break
             lst = app.query_one(EntryList)
             heads = [str(lst.get_option_at_index(i).prompt).strip() for i, e in enumerate(lst.index_map) if e is None]
-            assert heads == ["Worktrees (1)", "Branches ohne Worktree (1)", "▸ Remote-Branches (2)  (b: show)"]
+            assert [h.strip("─ ") for h in heads] == [
+                "Worktrees (1)", "Branches ohne Worktree (1)", "▸ Remote-Branches (2)  (b: show)"]
+            assert all(h.startswith("── ") and h.endswith("──") for h in heads)  # rule across the full width
             assert [getattr(e, "name", None) or e.branch for e in app.entries] == ["main", "loc"]
             await pilot.press("l")  # focus entries
             await pilot.press("down")  # skips the "Branches ohne Worktree" heading
@@ -220,5 +232,52 @@ def test_narrow_terminal_hides_details_without_breaking(make_repo):
             assert not app.query_one("#detail-col").display
             assert app.query_one("#entries-col").size.width >= 10
             assert len(app.entries) == 1
+
+    asyncio.run(run())
+
+
+def test_rule_and_header_text():
+    assert rule("Worktrees (7)", 24) == "── Worktrees (7) ───────"
+    assert len(rule("x" * 50, 20)) == 20 and "…" in rule("x" * 50, 20)
+    assert len(rule("a", 40)) == 40
+    assert header_text("o/n", "~/p", "alt", 30) == "kvasir · o/n · ~/p".ljust(27) + "alt"
+    assert header_text("o/n", "~/p", "a" * 40, 30) == "kvasir · o/n · ~/p"  # status dropped, path kept
+    assert header_text("o/n", "~/workspace/long", "", 20) == "kvasir · o/n · ~/wo…"
+    assert header_text("", "", "x", 20).startswith("kvasir")
+    assert data_status(None, None) == "nicht gefetcht"
+    assert data_status(0, 0, now=180) == "gefetcht vor 3m · gh vor 3m"
+    assert data_status(100, None, now=100) == "gefetcht gerade eben"
+
+
+def test_app_border_titles_and_footer_shows_enter_once(make_repo, monkeypatch):
+    from textual.widgets import Footer
+
+    root = _register(make_repo)
+    opened = []
+    monkeypatch.setattr("kvasir.tui.app.open_terminal", lambda p, t: opened.append(p))
+
+    async def run():
+        app = KvasirApp()
+        async with app.run_test(size=(100, 20)) as pilot:
+            for _ in range(50):
+                await pilot.pause(0.1)
+                if app.rows:
+                    break
+            titles = [app.query_one(f"#{c}-col").border_title for c in ("repos", "entries", "detail")]
+            assert titles == ["Repos (2)", "Worktrees & Branches", "Details"]
+            header = str(app.query_one("#header").render())
+            assert header.strip().startswith("kvasir · o/a · ")
+
+            def footer():
+                return [str(k.description) for k in app.query_one(Footer).query("FooterKey")]
+
+            assert "Open" not in footer()  # repo list focused: Enter does nothing there
+            await pilot.press("l")
+            await pilot.pause()
+            shown = footer()
+            assert "Open" in shown and {"Quit", "New", "Remove", "Note", "Fetch", "Pull", "Remote", "Overview"} <= set(shown)
+            await pilot.press("enter")
+            await pilot.pause()
+            assert opened == [root / "main"]  # exactly once
 
     asyncio.run(run())

@@ -89,3 +89,30 @@ def format_entry(e: Worktree | Branch, name_w: int, note: str = "", mark: str = 
     counts = fit(f"+{e.staged} ~{e.unstaged} ?{e.untracked}" if isinstance(e, Worktree) else "", COUNTS_W)
     subject = e.subject + (f"  ✎ {note[:30]}" if note else "")
     return f"{name}{gap}{age}{gap}{counts}{gap}{subject}"
+
+
+def rule(text: str, width: int) -> str:
+    """Group heading as a thin rule across the full width: `── text ─────`."""
+    head = f"── {cut(text, max(1, width - 5))} "
+    return head + "─" * max(0, width - len(head))
+
+
+def _ago(ts: float | None, now: float | None) -> str:
+    age = format_age(ts, now)
+    return "gerade eben" if age == "now" else f"vor {age}"
+
+
+def data_status(fetch_ts: float | None, gh_ts: float | None, now: float | None = None) -> str:
+    """Age of the data: `gefetcht vor 3m · gh vor 5m` (gh part only for GitHub Repos)."""
+    parts = ["nicht gefetcht" if fetch_ts is None else f"gefetcht {_ago(fetch_ts, now)}"]
+    if gh_ts is not None:
+        parts.append(f"gh {_ago(gh_ts, now)}")
+    return " · ".join(parts)
+
+
+def header_text(name: str, path: str, status: str, width: int) -> str:
+    """One line `kvasir · name · path`, status right-aligned. Status is dropped before the path is cut."""
+    left = " · ".join(["kvasir", *(x for x in (name, path) if x)])
+    if status and len(left) + 2 + len(status) <= width:
+        return left + " " * (width - len(left) - len(status)) + status
+    return cut(left, width)
