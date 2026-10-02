@@ -53,6 +53,26 @@ Umgesetzt: alle Issues #1 bis #10 (gemergt):
 | 9 | Notizen | 3, 7 |
 | 10 | `setup`: interaktive Rückfragen | – |
 
+## Plattform-Informationen (GitHub, danach Azure DevOps)
+
+Aus Issue #24, geplant per Grilling (2026-10-02). Rein lesend, ausschließlich über die `gh` CLI (kein Token in kvasir).
+
+| Thema | Entscheidung |
+|---|---|
+| Plattformen | Start GitHub (`gh`), danach Azure DevOps (`az` + `azure-devops`), Plattform aus der Remote-URL erkannt |
+| Anzeige | Pro Branch: Detail-Panel (PR, Work Item, Pipeline-Läufe) + Marker in der Branchzeile (`#12 ✓`). Zusätzlich Gesamtansicht (`i`): meine PRs, Review-Anfragen, meine Pipeline-Läufe (7 Tage, max. 20) |
+| Work Item | GitHub-Issue; erst `{id}` aus dem Branchnamen (Branch-Vorlage), sonst vom PR geschlossene Issues; Board-Status ("In Progress") braucht `gh auth refresh -s read:project` |
+| Aktualisierung | Zwischenspeicher `platform_cache.json`; Intervall (Standard 10 min, `platform_interval` pro Repo) und Taste `u`; läuft nur bei offener TUI |
+| Aktionen | Nur lesen. `Enter` öffnet im Browser, `c` springt zum lokalen Branch |
+
+| # | Thema | Blockiert durch |
+|---|---|---|
+| 27 | Plattform-Fundament: `gh`-Zugriff, Datenmodell, Cache | – |
+| 28 | Detail-Panel, Branch-Marker, Aktualisierung | 27 |
+| 29 | Gesamtansicht (`i`) | 27, 28 |
+| 25 | `setup`: CLIs prüfen / Installation anbieten, Konventionen nachträglich ändern (Entwurf) | – |
+| 26 | Azure DevOps (Entwurf) | 27 |
+
 ## Teststrategie
 
 Pro Abschnitt ein Test gegen ein Wegwerf-Repo (`tempfile`, echtes `git`). Windows-Verhalten (`wt.exe`, Pfade) prüft der Nutzer manuell.
