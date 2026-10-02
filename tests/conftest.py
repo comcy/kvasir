@@ -32,3 +32,18 @@ def make_repo(tmp_path):
             sh(root, "git", "remote", "add", "origin", remote)
         return root
     return _make
+
+
+class NoGh:
+    """Default provider in tests: `gh` is "not installed". No test may touch the network."""
+
+    def _err(self, *a, **k):
+        from kvasir.platform import Error, ErrorKind, Result
+        return Result(error=Error(ErrorKind.MISSING_CLI, "gh not found"))
+
+    pull_requests = work_item = pipeline_runs = _err
+
+
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    monkeypatch.setattr("kvasir.tui.platform_data.provider_for", lambda repo: NoGh())

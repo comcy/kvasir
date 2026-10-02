@@ -16,7 +16,9 @@ from kvasir import notes
 from kvasir.config import RepoConfig, load_local, load_repos
 from kvasir.new_worktree import is_bare_layout
 from kvasir.open_terminal import OpenTerminalError, open_terminal
+from kvasir.platform import Error
 from kvasir.sync import fetch, pull
+from kvasir.tui import platform_data, platform_view
 from kvasir.tui.columns import DetailPanel, EntryList, RepoList
 from kvasir.tui.data import RepoRow, load_rows
 from kvasir.tui.layout import group_entries, tilde
@@ -48,6 +50,7 @@ class KvasirApp(App):
         Binding("x", "remove_worktree", "Remove"),
         Binding("m", "note", "Note"),
         Binding("b", "toggle_remote", "Remote branches"),
+        Binding("u", "refresh_platform", "Platform"),
         Binding("h", "focus_previous", "Left", show=False),
         Binding("l", "focus_next", "Right", show=False),
     ]
@@ -59,6 +62,10 @@ class KvasirApp(App):
         self.show_remote = False  # Remote-Branches collapsed by default; survives reloads
         self._mark: tuple[str, Path] | None = None  # (repo url, new worktree path) to highlight after reload
         self.sync: dict[str, tuple[float | None, str | None]] = {}  # url -> (last fetch ts, error)
+        self.platform: dict[str, platform_data.Snapshot] = {}  # url -> cached GitHub data (only detected repos)
+        self._platform_error: dict[str, Error | None] = {}
+        self._platform_busy: set[str] = set()
+        self._platform_started = False
 
     def compose(self) -> ComposeResult:
         yield Static("", id="pathbar")
@@ -102,6 +109,52 @@ class KvasirApp(App):
         self.sync[url] = (prev_ts if err else time.time(), err)
         self.action_reload()  # ahead/behind and branches change after a fetch
 
+    def _start_platform(self) -> None:
+        """First load done: one refresh per GitHub repo now, then per `platform_interval`."""
+        self._platform_started = True
+        cfgs = load_repos()
+        for row in self.rows:
+            if platform_data.platform_of(row.url):
+                self._refresh_platform_url(row.url)
+                minutes = max(1, cfgs.get(row.url, RepoConfig()).platform_interval)
+                self.set_interval(minutes * 60, partial(self._refresh_platform_url, row.url))
+
+    def action_refresh_platform(self) -> None:
+        urls = [r.url for r in self.rows if platform_data.platform_of(r.url)]
+        for url in urls:
+            self._refresh_platform_url(url)
+        self.notify("refreshing platform data ..." if urls else "no GitHub repo registered")
+
+    def _refresh_platform_url(self, url: str) -> None:
+        row = next((r for r in self.rows if r.url == url), None)
+        if row is None or row.view is None or url in self._platform_busy:
+            return
+        self._platform_busy.add(url)
+        patterns = load_repos().get(url, RepoConfig()).branch_patterns
+        self._refresh_platform(url, patterns, platform_data.branch_names(row.view))
+
+    @work(thread=True, group="platform")
+    def _refresh_platform(self, url: str, patterns: list[str], branches: list[str]) -> None:
+        err = platform_data.refresh(url, patterns, branches)  # network: never on the UI thread
+        self.call_from_thread(self._platform_done, url, err)
+
+    def _platform_done(self, url: str, err: Error | None) -> None:
+        self._platform_busy.discard(url)
+        self._platform_error[url] = err
+        self._apply_platform()
+
+    def _apply_platform(self) -> None:
+        """Rebuild the snapshots from the cache (no network) and redraw."""
+        cfgs = load_repos()
+        for row in self.rows:
+            if row.view and platform_data.platform_of(row.url):
+                patterns = cfgs.get(row.url, RepoConfig()).branch_patterns
+                self.platform[row.url] = platform_data.snapshot(
+                    row.url, patterns, platform_data.branch_names(row.view), self._platform_error.get(row.url))
+        self.query_one(RepoList).set_platform(
+            {u: (platform_view.repo_line(s), s.error is not None) for u, s in self.platform.items()})
+        self._show_entries(self.query_one(RepoList).highlighted, self.query_one(EntryList).current_entry() or 0)
+
     def action_pull(self) -> None:
         i = self.query_one(EntryList).current_entry()
         wt = self.entries[i] if i is not None else None
@@ -138,6 +191,9 @@ class KvasirApp(App):
                 repos.highlighted = keep_repo
         self._show_entries(keep_repo if rows else None, keep_entry)
         self._mark = None
+        self._apply_platform()  # cache only
+        if not self._platform_started and rows:
+            self._start_platform()
 
     def action_remove_worktree(self) -> None:
         from kvasir.tui.remove_screen import RemoveScreen
@@ -160,14 +216,18 @@ class KvasirApp(App):
             if self._mark:
                 keep = next((i for i, e in enumerate(self.entries)
                              if getattr(e, "path", None) == self._mark[1]), keep)
-        self.query_one(EntryList).set_entries(groups, notes.latest_by_branch(row.url) if row else {}, keep)
+        snap = self.platform.get(row.url) if row else None
+        marks = platform_view.markers(snap, self.entries) if snap else {}
+        self.query_one(EntryList).set_entries(groups, notes.latest_by_branch(row.url) if row else {}, keep, marks)
         self._show_detail(self.entries[keep] if self.entries else None)
 
     def _show_detail(self, item) -> None:
         ri = self.query_one(RepoList).highlighted
         url = self.rows[ri].url if ri is not None and ri < len(self.rows) else ""
         name = getattr(item, "branch", None) or getattr(item, "name", None)
-        self.query_one(DetailPanel).show(item, notes.latest(url, name) if name else None)
+        snap, branch = self.platform.get(url), platform_data.branch_of(item) if item else None
+        extra = platform_view.detail_text(snap.info(branch), snap.error) if snap and branch else ""
+        self.query_one(DetailPanel).show(item, notes.latest(url, name) if name else None, extra)
 
     def action_toggle_remote(self) -> None:
         self.show_remote = not self.show_remote

@@ -79,10 +79,10 @@ def entry_name(e: Worktree | Branch) -> str:
     return e.name
 
 
-def format_entry(e: Worktree | Branch, name_w: int, note: str = "") -> str:
-    """Fixed columns: name | age | counts | subject (the subject takes the rest)."""
+def format_entry(e: Worktree | Branch, name_w: int, note: str = "", mark: str = "", mark_w: int = 0) -> str:
+    """Fixed columns: name | [PR marker, `mark_w` wide, 0 = no column] | age | counts | subject (subject takes the rest)."""
     gap = " " * GAP
-    name = fit(entry_name(e), name_w)
+    name = fit(entry_name(e), name_w) + (gap + fit(mark, mark_w) if mark_w else "")
     if isinstance(e, Worktree) and e.broken:
         return f"{name}{gap}[defekt: {e.broken}]"
     age = format_age(e.commit_ts).rjust(AGE_W)

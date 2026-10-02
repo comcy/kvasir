@@ -7,6 +7,7 @@ Terminal-Tool für **Git-Worktrees**: Überblick über mehrere Repos, schnell we
 ## Voraussetzungen
 
 - **git** (ab 2.36)
+- optional, für PR/Issue/Pipeline-Anzeige (GitHub): **gh** installiert und angemeldet (`gh auth login`). Für den Board-Status ("In Progress") eines Issues zusätzlich `gh auth refresh -s read:project`; ohne diese Berechtigung steht dort "nicht verfügbar (read:project fehlt)".
 - Python 3.11+ wird vom Installer über [uv](https://github.com/astral-sh/uv) bei Bedarf selbst besorgt.
 
 ## Installation
@@ -98,10 +99,13 @@ Drei Spalten, von links nach rechts verfeinert: **Repos → Worktrees/Branches �
 | `p` | Markierten Worktree pullen (`--ff-only`, nie Merge/Rebase) |
 | `m` | Notiz zum markierten Worktree/Branch |
 | `b` | Remote-Branches ein-/ausklappen (standardmäßig eingeklappt) |
+| `u` | GitHub-Daten (PR, Work Item, Pipelines) jetzt aktualisieren |
 | `r` | Neu laden |
 | `q` | Beenden |
 
 Fetch läuft zusätzlich im eingestellten Intervall, solange die TUI offen ist. Pull passiert nie automatisch.
+
+Für Repos auf GitHub zeigt kvasir pro Branch zusätzlich einen Marker in der Branchzeile (`#12 ✓` Checks grün, `#12 ✗` rot, `#12 …` läuft, `draft`) und im Detail-Panel den PR (Status, Review, Checks), das Work Item (Issue: Status, Labels, Zugewiesene, Board-Status) und die letzten Pipeline-Läufe des Branches. Das Work Item kommt aus der `{id}` des Branchnamens (Branch-Vorlage), sonst aus den vom PR geschlossenen Issues. Die Daten stammen aus dem Zwischenspeicher (`platform_cache.json`, "gh: aktualisiert vor …" in der Repo-Spalte) und werden im Hintergrund im Intervall `platform_interval` und mit `u` aktualisiert, nur solange die TUI offen ist und nur lesend. Fehlt `gh` oder ist es nicht angemeldet, steht ein dezenter Hinweis in der Repo-Spalte, der alte Stand bleibt sichtbar.
 
 Pro Worktree zeigt kvasir Branch, Alter und Betreff des letzten Commits, zuletzt aktive Zeit, Anzahl staged / unstaged / untracked Dateien sowie ahead/behind.
 
@@ -128,7 +132,7 @@ Zwei Dateien, Verzeichnis je Betriebssystem:
 | Windows | `%APPDATA%\kvasir\` |
 | überschreiben | Umgebungsvariable `KVASIR_CONFIG_DIR` |
 
-- **`repos.toml`**: pro Remote-URL (z. B. `github.com/comcy/kvasir`) Branch-Vorlagen und Fetch-Intervall (Minuten). Unabhängig vom Rechner, kann synchronisiert werden.
+- **`repos.toml`**: pro Remote-URL (z. B. `github.com/comcy/kvasir`) Branch-Vorlagen, Fetch-Intervall (`fetch_interval`) und Intervall für die GitHub-Daten (`platform_interval`, Standard 10), jeweils in Minuten. Unabhängig vom Rechner, kann synchronisiert werden.
 - **`local.toml`**: pro Rechner der lokale Pfad je Repo und `open_command`.
 
 `open_command` startet ein neues Terminal im Worktree, `{path}` wird durch den Pfad ersetzt. Standard: Windows `wt.exe -d {path}`, macOS und Linux `kitty --directory {path}`.
