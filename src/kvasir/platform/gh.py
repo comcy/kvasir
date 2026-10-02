@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from kvasir.platform.models import (
@@ -22,8 +23,8 @@ TIMEOUT = 30  # seconds
 _ENV = {**os.environ, "GH_PROMPT_DISABLED": "1", "NO_COLOR": "1"}
 
 PR_FIELDS = ("number,title,state,isDraft,reviewDecision,statusCheckRollup,url,author,headRefName,"
-             "closingIssuesReferences")
-SEARCH_FIELDS = "number,title,state,isDraft,url,repository,author"  # no checks/reviews/branch in search
+             "closingIssuesReferences,createdAt")
+SEARCH_FIELDS = "number,title,state,isDraft,url,repository,author,createdAt"  # no checks/reviews/branch in search
 ISSUE_FIELDS = "number,title,state,labels,assignees,url"
 ISSUE_BOARD_FIELDS = ISSUE_FIELDS + ",projectItems"  # needs read:project when the issue is on a board
 RUN_FIELDS = "workflowName,headBranch,status,conclusion,startedAt,updatedAt,url"
@@ -104,6 +105,7 @@ def parse_pr(d: dict) -> PullRequest:
         checks=_checks(d.get("statusCheckRollup")),
         closing_issues=tuple(i["number"] for i in d.get("closingIssuesReferences") or ()),
         repo=(d.get("repository") or {}).get("nameWithOwner"),
+        created_at=d.get("createdAt"),
     )
 
 
@@ -148,6 +150,16 @@ class GitHub:
         """Open + recently merged/closed PRs (newest first, at most `limit`)."""
         return _parsed(_json("pr", "list", "-R", self.slug, "--state", "all", "--limit", str(limit),
                              "--json", PR_FIELDS), parse_pr)
+
+    def pull_request(self, number: int) -> Result[PullRequest]:
+        """One PR with review decision, checks and branch (what `gh search prs` lacks)."""
+        res = _json("pr", "view", str(number), "-R", self.slug, "--json", PR_FIELDS)
+        if not res.ok:
+            return res
+        try:
+            return Result(data=replace(parse_pr(res.data), repo=self.slug))
+        except (KeyError, TypeError, AttributeError) as e:
+            return Result(error=Error(ErrorKind.OTHER, f"unexpected gh output: {e!r}"))
 
     def work_item(self, number: int) -> Result[WorkItem]:
         """Issue incl. board status. Without read:project: still the issue, board_available=False."""
