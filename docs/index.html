@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kvasir</title>
+<meta name="description" content="kvasir: Terminal-Tool für Git-Worktrees. Überblick über mehrere Repos, schnell wechseln, Worktrees anlegen, sicher aufräumen.">
+<style>
+:root{--bg:#fafafa;--fg:#1c1f24;--mute:#5b6370;--card:#fff;--line:#d9dde3;--acc:#0b6bcb;--code:#f0f2f5}
+@media (prefers-color-scheme:dark){:root{--bg:#14161a;--fg:#e6e8eb;--mute:#9aa3b0;--card:#1c1f25;--line:#2e333b;--acc:#6cb2ff;--code:#0f1115}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:46rem;margin:0 auto;padding:2rem 1rem 4rem}
+h1{font-size:2.4rem;margin:.2em 0 0}
+h2{font-size:1.3rem;margin:2.2em 0 .5em;padding-bottom:.2em;border-bottom:1px solid var(--line)}
+p{margin:.5em 0}
+.lead{font-size:1.15rem;color:var(--mute)}
+a{color:var(--acc)}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem}
+code{background:var(--code);padding:.1em .35em;border-radius:4px}
+.cmd{display:flex;gap:.5rem;align-items:stretch;margin:.4em 0 1em}
+.cmd pre{flex:1;min-width:0;margin:0;padding:.7rem .9rem;background:var(--code);border:1px solid var(--line);border-radius:6px;overflow-x:auto}
+pre code{background:none;padding:0}
+button{font:inherit;font-size:.85rem;padding:0 .9rem;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:6px;cursor:pointer}
+button:hover,button:focus-visible{border-color:var(--acc);color:var(--acc)}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line)}
+td{padding:.4rem .7rem;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+td:first-child{white-space:nowrap}
+.tw{overflow-x:auto}
+footer{margin-top:3rem;color:var(--mute);font-size:.9rem}
+</style>
+</head>
+<body>
+<main>
+<h1>kvasir</h1>
+<p class="lead">Terminal-Tool für Git-Worktrees: Überblick über mehrere Repos, schnell wechseln, neue Worktrees anlegen, sicher aufräumen. Linux, macOS, Windows. Befehle: <code>kvasir</code> oder kurz <code>kv</code>.</p>
+<p><a href="https://github.com/comcy/kvasir">GitHub</a> · <a href="https://github.com/comcy/kvasir#readme">README</a></p>
+
+<h2>Voraussetzungen</h2>
+<ul>
+<li><strong>git</strong> ab 2.36</li>
+<li>Optional für PR-, Issue- und Pipeline-Anzeige (GitHub): <strong>gh</strong> installiert und angemeldet (<code>gh auth login</code>).</li>
+<li>Python 3.11+ besorgt der Installer bei Bedarf selbst über <a href="https://github.com/astral-sh/uv">uv</a>.</li>
+</ul>
+
+<h2>Installation</h2>
+<p>Linux / macOS</p>
+<div class="cmd"><pre><code>curl -LsSf https://comcy.github.io/kvasir/install.sh | sh</code></pre><button type="button" data-copy>Kopieren</button></div>
+<p>Windows (PowerShell)</p>
+<div class="cmd"><pre><code>irm https://comcy.github.io/kvasir/install.ps1 | iex</code></pre><button type="button" data-copy>Kopieren</button></div>
+<p>Das Skript installiert <code>uv</code> (falls nicht vorhanden) und danach kvasir direkt aus GitHub. Kein Paketregister, kein Konto. Wird <code>kvasir</code> nicht gefunden: Terminal neu starten oder <code>uv tool update-shell</code>. Aktualisieren: Skript erneut ausführen oder <code>uv tool upgrade kvasir</code>.</p>
+<p>Ohne Skript:</p>
+<div class="cmd"><pre><code>uv tool install "git+https://github.com/comcy/kvasir"</code></pre><button type="button" data-copy>Kopieren</button></div>
+
+<h2>Schnellstart</h2>
+<div class="cmd"><pre><code># Repo im Bare-Layout klonen und registrieren
+kvasir setup https://github.com/comcy/kvasir
+
+# oder ein vorhandenes Repo registrieren
+kvasir setup ~/Workspace/mein-repo
+
+# Übersicht öffnen
+kvasir tui</code></pre><button type="button" data-copy>Kopieren</button></div>
+<p><code>setup</code> fragt nach Branch-Vorlagen, Fetch-Intervall und dem Befehl zum Öffnen eines Terminals. Später ändern: <code>kvasir setup &lt;pfad&gt; --reconfigure</code>. Konfigurationsort anzeigen: <code>kvasir config</code>.</p>
+
+<h2>TUI</h2>
+<p>Drei Spalten: Repos, Worktrees/Branches, Details.</p>
+<div class="tw"><table>
+<tr><td><code>↑</code> <code>↓</code></td><td>Auswahl</td></tr>
+<tr><td><code>h</code> / <code>l</code></td><td>Spalte links / rechts</td></tr>
+<tr><td><code>Enter</code></td><td>Terminal im Worktree öffnen</td></tr>
+<tr><td><code>n</code></td><td>Neuen Worktree anlegen</td></tr>
+<tr><td><code>x</code></td><td>Worktree entfernen (verweigert bei ungesicherter Arbeit)</td></tr>
+<tr><td><code>f</code></td><td>Alle Repos fetchen</td></tr>
+<tr><td><code>p</code></td><td>Markierten Worktree pullen (<code>--ff-only</code>)</td></tr>
+<tr><td><code>m</code></td><td>Notiz zum Worktree/Branch</td></tr>
+<tr><td><code>b</code></td><td>Remote-Branches ein-/ausklappen</td></tr>
+<tr><td><code>u</code></td><td>GitHub-Daten (PR, Work Item, Pipelines) aktualisieren</td></tr>
+<tr><td><code>i</code></td><td>Gesamtansicht: meine PRs, Review-Anfragen, Pipeline-Läufe</td></tr>
+<tr><td><code>r</code></td><td>Neu laden</td></tr>
+<tr><td><code>q</code></td><td>Beenden</td></tr>
+</table></div>
+<p>Pull passiert nie automatisch. Die GitHub-Anzeige ist rein lesend.</p>
+
+<h2>Konfiguration</h2>
+<p>Zwei Dateien: <code>repos.toml</code> (pro Remote-URL Branch-Vorlagen, <code>fetch_interval</code>, <code>platform_interval</code>; kann synchronisiert werden) und <code>local.toml</code> (pro Rechner lokaler Pfad je Repo und <code>open_command</code>).</p>
+<div class="tw"><table>
+<tr><td>Linux / macOS</td><td><code>~/.config/kvasir/</code> (bzw. <code>$XDG_CONFIG_HOME/kvasir/</code>)</td></tr>
+<tr><td>Windows</td><td><code>%APPDATA%\kvasir\</code></td></tr>
+<tr><td>Überschreiben</td><td>Umgebungsvariable <code>KVASIR_CONFIG_DIR</code></td></tr>
+</table></div>
+<p>Branch-Vorlagen mit <code>{type}</code>, <code>{id}</code>, <code>{slug}</code>, <code>{date}</code>, z. B. <code>{type}/{slug}</code> oder <code>features/{id}-{slug}</code>. <code>open_command</code> ersetzt <code>{path}</code>; Standard Windows <code>wt.exe -d {path}</code>, sonst <code>kitty --directory {path}</code>.</p>
+
+<footer>kvasir · Status: früh, aber nutzbar. Details in der <a href="https://github.com/comcy/kvasir#readme">README</a> · <a href="https://github.com/comcy/kvasir/issues">Issues</a></footer>
+</main>
+<script>
+document.querySelectorAll("[data-copy]").forEach(function(b){
+  b.addEventListener("click",function(){
+    var pre=b.previousElementSibling;
+    (navigator.clipboard?navigator.clipboard.writeText(pre.textContent):Promise.reject()).then(function(){b.textContent="Kopiert"},function(){
+      var r=document.createRange();r.selectNodeContents(pre);var s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent="Markiert";
+    });
+    setTimeout(function(){b.textContent="Kopieren"},1500);
+  });
+});
+</script>
+</body>
+</html>
