@@ -68,8 +68,8 @@ def cut(s: str, width: int) -> str:
 
 
 def name_width(names: list[str], total: int) -> int:
-    """Branch column: as wide as the longest name, capped at 40% of the line (cap at least 8)."""
-    cap = max(8, total * 2 // 5)
+    """Branch column: as wide as the longest name, capped at 55% of the line (cap at least 8)."""
+    cap = max(8, total * 11 // 20)
     return min(max((len(n) for n in names), default=8), cap)
 
 

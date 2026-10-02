@@ -154,7 +154,7 @@ def test_layout_pure_functions():
     assert tilde(Path("/etc/x"), Path("/h/u")) == "/etc/x"
     assert fit("abc", 5) == "abc  " and fit("abcdef", 4) == "abc…" and fit("x", 0) == ""
     assert name_width(["a"], 100) == 1
-    assert name_width(["x" * 50], 100) == 40  # capped at 40%
+    assert name_width(["x" * 80], 100) == 55  # capped at 55%
     assert name_width(["x" * 50], 10) == 8  # cap floor
     assert name_width(["x" * 20], 100) == 20
     wt = Worktree(Path("/r/main"), "main", commit_ts=0, subject="subj", staged=1, unstaged=2, untracked=3)

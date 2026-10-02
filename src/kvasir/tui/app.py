@@ -30,10 +30,11 @@ class KvasirApp(App):
     Horizontal { height: 1fr; }
     #pathbar { height: 1; padding: 0 1; color: $text-muted; }
     .col { height: 1fr; }
-    #repos-col { width: 2fr; min-width: 10; }
-    #entries-col { width: 3fr; min-width: 10; border-left: solid $primary; }
+    #repos-col { width: 1fr; min-width: 30; max-width: 40; }
+    #entries-col { width: 4fr; min-width: 10; border-left: solid $primary; }
     #detail-col { width: 2fr; min-width: 8; border-left: solid $primary; }
     .narrow #detail-col { display: none; }
+    .narrow #repos-col { min-width: 10; }
     .colhead { height: 1; padding: 0 1; text-style: bold; background: $boost; }
     RepoList, EntryList { height: 1fr; padding: 0 1; }
     DetailPanel { height: 1fr; padding: 0 1; }
