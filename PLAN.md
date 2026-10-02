@@ -81,7 +81,7 @@ Pro Abschnitt ein Test gegen ein Wegwerf-Repo (`tempfile`, echtes `git`). Window
 
 - **Board-Status live prüfen:** `projectItems` mit echtem Projekt-Board ist nur über Fixtures getestet (Token braucht `read:project`).
 - **Plattform-Nachbesserungen:** `webbrowser.open` läuft im UI-Thread; `gh api user` pro Repo bei jedem Refresh (cachen).
-- **Azure DevOps (#26)** geplant: #42 (Repo-Identität/Erkennung), #43 (Provider + TUI), #44 (`doctor`/`setup` für `az`). Nicht live testbar auf dem Entwicklungsrechner; echte Prüfung durch den Nutzer. Erledigt: #25 (`kvasir doctor`), #35 (`setup --reconfigure`, `kvasir config`), #36 (Einstellungen-Dialog `e`), #33 (Titel-Ränder, Footer), #37 (GitHub Pages von `main`).
+- **Azure DevOps (#26):** umgesetzt mit #42 (Repo-Identität/Erkennung), #43 (Provider + TUI), #44 (`doctor`/`setup` für `az`). Nur gegen Dokumentation und Fixtures getestet; **echte Prüfung durch den Nutzer steht aus** (Checkliste als Kommentar an #26). Erledigt: #25 (`kvasir doctor`), #35 (`setup --reconfigure`, `kvasir config`), #36 (Einstellungen-Dialog `e`), #33 (Titel-Ränder, Footer), #37 (GitHub Pages von `main`).
 - **Windows testen** (`wt.exe`, Pfade, `install.ps1`) und die Install-Skripte einmal real ausführen — nur Linux wurde bisher geprüft.
 - **Tagesauswertung → Vault-Journal** („woran gearbeitet“): noch kein Issue, `vault_path` noch nicht konfigurierbar. Vorher grillen.
 - **Kleinigkeiten:** Abschlussnotiz wird vor `git worktree remove` gespeichert (bleibt stehen, wenn Git ablehnt); SSH-Passphrase-Abfrage kann Fetch bis zum Timeout blockieren; `setup`-URL-Erkennung bei Tippfehler im Pfad; `{date}` prüft nur das Format.
