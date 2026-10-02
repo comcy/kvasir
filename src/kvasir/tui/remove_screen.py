@@ -18,11 +18,11 @@ from kvasir.worktrees import Worktree
 class RemoveScreen(ModalScreen[bool]):
     DEFAULT_CSS = """
     RemoveScreen { align: center middle; }
-    RemoveScreen > Vertical { width: 70%; min-width: 30; height: auto; border: thick $primary; padding: 1 2; background: $surface; }
+    RemoveScreen > Vertical { width: 70%; min-width: 30; height: auto; border: round $accent; border-title-color: $accent; border-title-style: bold; padding: 1 2; background: $surface; }
     """
     BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "cancel", "Cancel"),
-        Binding("enter", "confirm", "Confirm"),
+        Binding("enter", "confirm", "OK"),
         Binding("y", "yes", "Yes", show=False),
         Binding("n", "cancel", "No", show=False),
     ]
@@ -41,6 +41,7 @@ class RemoveScreen(ModalScreen[bool]):
             yield Input(placeholder="type the branch name to confirm", id="confirm")
 
     def on_mount(self) -> None:
+        self.query_one(Vertical).border_title = f"Remove worktree · {self.label}"
         msg, inp = self.query_one("#msg", Static), self.query_one(Input)
         inp.display, inp.disabled = False, True
         if self.wt.broken == "directory missing":

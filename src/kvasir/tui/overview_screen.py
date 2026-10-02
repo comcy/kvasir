@@ -21,15 +21,19 @@ from kvasir.tui import overview_data as od
 from kvasir.tui.data import RepoRow
 
 
+class OvList(OptionList):
+    BINDINGS: ClassVar[list[Binding]] = [Binding("enter", "select", "Browser")]  # visible in the footer
+
+
 class OverviewScreen(Screen["tuple[int, int] | None"]):
     DEFAULT_CSS = """
     OverviewScreen #ov-status { height: 1; padding: 0 1; color: $text-muted; }
-    OverviewScreen OptionList { height: 1fr; padding: 0 1; }
+    OverviewScreen OptionList, OverviewScreen OptionList:focus { height: 1fr; padding: 0 1; border: round $accent; border-title-color: $accent; border-title-style: bold; }
     """
     BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "back", "Back"),
         Binding("u", "refresh", "Refresh"),
-        Binding("c", "jump", "Go to branch"),
+        Binding("c", "jump", "Branch"),
     ]
 
     def __init__(self, rows: list[RepoRow]) -> None:
@@ -43,12 +47,13 @@ class OverviewScreen(Screen["tuple[int, int] | None"]):
 
     def compose(self) -> ComposeResult:
         yield Static("", id="ov-status")
-        yield OptionList(id="ov-list")
-        yield Footer()
+        yield OvList(id="ov-list")
+        yield Footer(show_command_palette=False)
 
     def on_mount(self) -> None:
         cfgs = load_repos()
         minutes = min((max(1, cfgs.get(u, RepoConfig()).platform_interval) for u in self.repos.values()), default=10)
+        self.query_one(OptionList).border_title = "Gesamtansicht"
         self.query_one(OptionList).focus()
         self._draw()
         if od.is_stale(od.snapshot(self.urls), minutes):
