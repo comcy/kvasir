@@ -137,6 +137,27 @@ Pro Repo festgelegt (Platzhalter: `{type}`, `{id}`, `{slug}`, `{date}`):
 
 Ein neuer Branch ist gültig, wenn er mindestens eine Vorlage trifft. Ein Verstoß ist nur eine Warnung.
 
+## `kvasir doctor`
+
+Prüft die Voraussetzungen, jederzeit und ohne ein Repo zu registrieren. Je Punkt `✓` (ok), `✗` (Fehler) oder `!` (Warnung) mit passendem Befehl zur Behebung. Exit-Code 1 bei mindestens einem `✗`, sonst 0.
+
+Geprüft werden: `git` ab 2.36, `gh` im PATH, `gh` angemeldet, Berechtigung `read:project` (nur Warnung), lesbare `repos.toml`/`local.toml`, registrierte Repos mit fehlendem lokalem Pfad, und je Repo die erkannte Plattform samt verfügbarer CLI. Azure DevOps ist noch nicht unterstützt (#26).
+
+`setup` führt dieselbe Prüfung für die Plattform des Repos aus (nur im Terminal, abschaltbar mit `--no-cli-check`). Ohne Terminal gibt `doctor` nur aus und fragt nie.
+
+**Installation von `gh`** (nur nach ausdrücklicher Bestätigung `[y/N]`, Standard Nein):
+
+| System | Befehl |
+|---|---|
+| Windows | `winget install --id GitHub.cli` (kvasir führt ihn nach `y` aus) |
+| macOS | `brew install gh` (kvasir führt ihn nach `y` aus) |
+| Arch | `sudo pacman -S github-cli` (nur angezeigt) |
+| Fedora | `sudo dnf install gh` (nur angezeigt) |
+| Debian / Ubuntu | [offizielle Anleitung](https://github.com/cli/cli/blob/trunk/docs/install_linux.md) |
+| sonst | <https://cli.github.com> |
+
+Unter Linux führt kvasir nie eine Installation aus (braucht `sudo`). Fehlt `winget`/`brew`, gibt es nur den Link. Anmeldung (`gh auth login`) und Berechtigung (`gh auth refresh -s read:project`) zeigt kvasir nur an und führt sie nie selbst aus.
+
 ## Konfiguration
 
 Zwei Dateien, Verzeichnis je Betriebssystem:

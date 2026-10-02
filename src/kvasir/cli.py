@@ -6,6 +6,7 @@ from typing import Annotated
 import typer
 
 from kvasir import __version__
+from kvasir import doctor as doctor_mod
 from kvasir.clone import clone_bare
 from kvasir.config import (
     DEFAULT_FETCH_MINUTES,
@@ -107,6 +108,7 @@ def setup(
     fetch_interval: Annotated[int | None, typer.Option(help="Minutes between fetches")] = None,
     platform_interval: Annotated[int | None, typer.Option(help="Minutes between PR/issue/pipeline refreshes")] = None,
     reconfigure: Annotated[bool, typer.Option("--reconfigure", help="Change settings of a registered repo")] = False,
+    no_cli_check: Annotated[bool, typer.Option("--no-cli-check", help="Skip the gh check after registering")] = False,
 ) -> None:
     """Clone a URL into the bare layout and register it, or register an existing repo."""
     try:
@@ -156,6 +158,18 @@ def setup(
 
     layout = "bare layout" if info.bare_layout else "normal clone (overview only)"
     typer.echo(f"{'Updated' if known else 'Registered'} {url} [{layout}] at {info.root}")
+    if _interactive() and not no_cli_check:  # a failed or declined check never undoes the registration
+        doctor_mod.report(lambda: doctor_mod.repo_checks(url), True, _confirm, typer.echo)
+
+
+def _confirm(question: str) -> bool:
+    return typer.confirm(question, default=False)
+
+
+@app.command()
+def doctor() -> None:
+    """Check prerequisites (git, gh, login, config) and offer to install a missing CLI."""
+    raise typer.Exit(doctor_mod.report(doctor_mod.all_checks, _interactive(), _confirm, typer.echo))
 
 
 @app.command()
