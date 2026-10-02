@@ -100,12 +100,15 @@ Drei Spalten, von links nach rechts verfeinert: **Repos → Worktrees/Branches �
 | `m` | Notiz zum markierten Worktree/Branch |
 | `b` | Remote-Branches ein-/ausklappen (standardmäßig eingeklappt) |
 | `u` | GitHub-Daten (PR, Work Item, Pipelines) jetzt aktualisieren |
+| `i` | Gesamtansicht: meine PRs, Review-Anfragen, Pipeline-Läufe (siehe unten) |
 | `r` | Neu laden |
 | `q` | Beenden |
 
 Fetch läuft zusätzlich im eingestellten Intervall, solange die TUI offen ist. Pull passiert nie automatisch.
 
 Für Repos auf GitHub zeigt kvasir pro Branch zusätzlich einen Marker in der Branchzeile (`#12 ✓` Checks grün, `#12 ✗` rot, `#12 …` läuft, `draft`) und im Detail-Panel den PR (Status, Review, Checks), das Work Item (Issue: Status, Labels, Zugewiesene, Board-Status) und die letzten Pipeline-Läufe des Branches. Das Work Item kommt aus der `{id}` des Branchnamens (Branch-Vorlage), sonst aus den vom PR geschlossenen Issues. Die Daten stammen aus dem Zwischenspeicher (`platform_cache.json`, "gh: aktualisiert vor …" in der Repo-Spalte) und werden im Hintergrund im Intervall `platform_interval` und mit `u` aktualisiert, nur solange die TUI offen ist und nur lesend. Fehlt `gh` oder ist es nicht angemeldet, steht ein dezenter Hinweis in der Repo-Spalte, der alte Stand bleibt sichtbar.
+
+**Gesamtansicht (`i`):** eigene Seite über alle registrierten GitHub-Repos, unabhängig vom ausgewählten Branch, mit drei Abschnitten (je höchstens 20 Einträge): **Meine offenen PRs**, **Zum Review angefragt** (mit Autor) und **Meine Pipeline-Läufe** der letzten 7 Tage (GitHub Actions). PR-Zeilen zeigen Repo, Nummer, Titel, Review-Stand (approved / changes requested / ausstehend), Checks (✓ ✗ …) und Alter; Lauf-Zeilen Repo, Workflow, Branch, Status, Dauer und Alter. Review-Stand und Checks lädt kvasir pro PR mit `gh pr view` nach (die Suche liefert sie nicht). Tasten: `Enter` öffnet den Eintrag im Browser, `c` springt zum zugehörigen Branch/Worktree der Hauptansicht (falls lokal vorhanden), `u` aktualisiert sofort, `Esc` geht zurück. Die Daten kommen aus dem Zwischenspeicher, die Seite zeigt "aktualisiert vor …" und aktualisiert im Intervall `platform_interval` (kürzester Wert der GitHub-Repos). Fehlt `gh` oder die Anmeldung, steht ein Hinweis oben auf der Seite. Rein lesend.
 
 Pro Worktree zeigt kvasir Branch, Alter und Betreff des letzten Commits, zuletzt aktive Zeit, Anzahl staged / unstaged / untracked Dateien sowie ahead/behind.
 

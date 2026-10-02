@@ -51,6 +51,7 @@ class KvasirApp(App):
         Binding("m", "note", "Note"),
         Binding("b", "toggle_remote", "Remote branches"),
         Binding("u", "refresh_platform", "Platform"),
+        Binding("i", "overview", "Overview"),
         Binding("h", "focus_previous", "Left", show=False),
         Binding("l", "focus_next", "Right", show=False),
     ]
@@ -154,6 +155,19 @@ class KvasirApp(App):
         self.query_one(RepoList).set_platform(
             {u: (platform_view.repo_line(s), s.error is not None) for u, s in self.platform.items()})
         self._show_entries(self.query_one(RepoList).highlighted, self.query_one(EntryList).current_entry() or 0)
+
+    def action_overview(self) -> None:
+        from kvasir.tui.overview_screen import OverviewScreen
+
+        def done(target: tuple[int, int] | None) -> None:
+            if target:  # `c` in the overview: show that Branch here
+                ri, ei = target
+                with self.query_one(RepoList).prevent(OptionList.OptionHighlighted):
+                    self.query_one(RepoList).highlighted = ri
+                self._show_entries(ri, ei)
+                self.query_one(EntryList).focus()
+
+        self.push_screen(OverviewScreen(self.rows), done)
 
     def action_pull(self) -> None:
         i = self.query_one(EntryList).current_entry()

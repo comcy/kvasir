@@ -219,6 +219,18 @@ def test_search(monkeypatch):
     assert "--review-requested" in f.calls[1][0]
 
 
+def test_pull_request_view(monkeypatch):
+    f = FakeRun(monkeypatch, ok(fx("pr_view.json")), fail("HTTP 404: Not Found"), ok("{}"))
+    g = GitHub("comcy/kvasir")
+    p = g.pull_request(23).data
+    assert (p.number, p.branch, p.repo, p.state, p.review, p.checks) == (
+        23, "feat/22-tui-layout", "comcy/kvasir", "merged", None, None)
+    assert p.created_at == "2026-10-02T16:28:34Z" and p.closing_issues == (22,)
+    assert f.calls[0][0][:7] == ["gh", "pr", "view", "23", "-R", "comcy/kvasir", "--json"]
+    assert g.pull_request(1).error.kind is ErrorKind.OTHER  # error object, no exception
+    assert g.pull_request(2).error.kind is ErrorKind.OTHER  # unexpected output
+
+
 # --- cache ---
 
 U = "github.com/o/r"

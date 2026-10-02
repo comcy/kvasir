@@ -41,7 +41,7 @@ class NoGh:
         from kvasir.platform import Error, ErrorKind, Result
         return Result(error=Error(ErrorKind.MISSING_CLI, "gh not found"))
 
-    pull_requests = work_item = pipeline_runs = _err
+    pull_requests = work_item = pipeline_runs = pull_request = my_pull_requests = review_requests = _err
 
 
 @pytest.fixture(autouse=True)
