@@ -111,6 +111,7 @@ Drei Spalten, von links nach rechts verfeinert: **Repos → Worktrees/Branches �
 | `m` | Notiz zum markierten Worktree/Branch |
 | `b` | Remote-Branches ein-/ausklappen (standardmäßig eingeklappt) |
 | `u` | GitHub-Daten (PR, Work Item, Pipelines) jetzt aktualisieren |
+| `e` | Einstellungen des gewählten Repos bearbeiten (Branch-Vorlagen mit Presets, Fetch- und GitHub-Intervall; wirkt sofort) |
 | `i` | Gesamtansicht: meine PRs, Review-Anfragen, Pipeline-Läufe (siehe unten) |
 | `r` | Neu laden |
 | `q` | Beenden |
