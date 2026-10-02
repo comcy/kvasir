@@ -1,0 +1,138 @@
+[
+  {
+    "author": {
+      "is_bot": false,
+      "login": "comcy"
+    },
+    "closingIssuesReferences": [],
+    "headRefName": "release/2026-08-20",
+    "isDraft": false,
+    "mergedAt": null,
+    "number": 177,
+    "reviewDecision": "",
+    "state": "OPEN",
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-27T11:15:55Z",
+        "conclusion": "SUCCESS",
+        "startedAt": "2026-09-27T11:14:39Z",
+        "status": "COMPLETED",
+        "workflowName": "E2E Tests"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-27T11:15:20Z",
+        "conclusion": "SUCCESS",
+        "startedAt": "2026-09-27T11:14:39Z",
+        "status": "COMPLETED",
+        "workflowName": ".github/workflows/sck-api-build.yml"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-27T11:18:48Z",
+        "conclusion": "SUCCESS",
+        "startedAt": "2026-09-27T11:14:37Z",
+        "status": "COMPLETED",
+        "workflowName": "Test-System Deploy"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-27T11:22:32Z",
+        "conclusion": "SUCCESS",
+        "startedAt": "2026-09-27T11:18:51Z",
+        "status": "COMPLETED",
+        "workflowName": "Test-System Deploy"
+      }
+    ],
+    "title": "Release 2026-08-20: sck-admin-app, sck-api (SQLite/Auth/SEPA), Trips, Kurse, Deploy-Pipeline",
+    "updatedAt": "2026-09-27T11:14:33Z",
+    "url": "https://github.com/comcy/skiclub-kapfenburg.de/pull/177"
+  },
+  {
+    "author": {
+      "is_bot": true,
+      "login": "app/dependabot"
+    },
+    "closingIssuesReferences": [],
+    "headRefName": "dependabot/npm_and_yarn/nodemailer-9.0.1",
+    "isDraft": false,
+    "mergedAt": null,
+    "number": 176,
+    "reviewDecision": "",
+    "state": "OPEN",
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-08-16T11:54:12Z",
+        "conclusion": "SUCCESS",
+        "startedAt": "2026-08-16T11:53:43Z",
+        "status": "COMPLETED",
+        "workflowName": ".github/workflows/sck-api-build.yml"
+      }
+    ],
+    "title": "Bump nodemailer from 6.10.1 to 9.0.1",
+    "updatedAt": "2026-08-16T11:53:37Z",
+    "url": "https://github.com/comcy/skiclub-kapfenburg.de/pull/176"
+  },
+  {
+    "author": {
+      "is_bot": false,
+      "login": "comcy"
+    },
+    "closingIssuesReferences": [],
+    "headRefName": "features/trip-register-improvement",
+    "isDraft": false,
+    "mergedAt": "2026-08-16T11:51:58Z",
+    "number": 175,
+    "reviewDecision": "",
+    "state": "MERGED",
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-08-16T11:46:40Z",
+        "conclusion": "SUCCESS",
+        "startedAt": "2026-08-16T11:46:07Z",
+        "status": "COMPLETED",
+        "workflowName": ".github/workflows/sck-api-build.yml"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-08-16T11:47:50Z",
+        "conclusion": "FAILURE",
+        "startedAt": "2026-08-16T11:46:18Z",
+        "status": "COMPLETED",
+        "workflowName": ""
+      }
+    ],
+    "title": "Trip-Registrierung: Preisanzeige, Anzahlung entfernt + pnpm/Angular-22-Migration",
+    "updatedAt": "2026-08-16T11:52:02Z",
+    "url": "https://github.com/comcy/skiclub-kapfenburg.de/pull/175"
+  },
+  {
+    "author": {
+      "is_bot": true,
+      "login": "app/dependabot"
+    },
+    "closingIssuesReferences": [],
+    "headRefName": "dependabot/npm_and_yarn/src/web/hono/node-server-1.19.17",
+    "isDraft": false,
+    "mergedAt": null,
+    "number": 174,
+    "reviewDecision": "",
+    "state": "CLOSED",
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-08-12T20:10:48Z",
+        "conclusion": "FAILURE",
+        "startedAt": "2026-08-12T20:08:29Z",
+        "status": "COMPLETED",
+        "workflowName": ""
+      }
+    ],
+    "title": "Bump @hono/node-server from 1.19.14 to 1.19.17 in /src/web",
+    "updatedAt": "2026-08-16T11:54:41Z",
+    "url": "https://github.com/comcy/skiclub-kapfenburg.de/pull/174"
+  }
+]

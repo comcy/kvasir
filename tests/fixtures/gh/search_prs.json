@@ -1,0 +1,36 @@
+[
+  {
+    "author": {
+      "is_bot": false,
+      "login": "comcy",
+      "type": "User",
+      "url": "https://github.com/comcy"
+    },
+    "isDraft": false,
+    "number": 23,
+    "repository": {
+      "nameWithOwner": "comcy/kvasir"
+    },
+    "state": "merged",
+    "title": "feat(tui): Layout entzerren, Worktrees/Branches gruppieren, Repo-Pfad anzeigen",
+    "updatedAt": "2026-10-02T16:30:53Z",
+    "url": "https://github.com/comcy/kvasir/pull/23"
+  },
+  {
+    "author": {
+      "is_bot": false,
+      "login": "comcy",
+      "type": "User",
+      "url": "https://github.com/comcy"
+    },
+    "isDraft": false,
+    "number": 20,
+    "repository": {
+      "nameWithOwner": "comcy/kvasir"
+    },
+    "state": "merged",
+    "title": "feat(notes): Notizen pro Worktree (m) und Abschlussnotiz beim Entfernen",
+    "updatedAt": "2026-10-01T22:36:26Z",
+    "url": "https://github.com/comcy/kvasir/pull/20"
+  }
+]

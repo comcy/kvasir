@@ -1,0 +1,83 @@
+[
+  {
+    "author": {
+      "is_bot": false,
+      "login": "comcy"
+    },
+    "closingIssuesReferences": [
+      {
+        "number": 22,
+        "repository": {
+          "owner": {
+            "login": "comcy"
+          }
+        },
+        "url": "https://github.com/comcy/kvasir/issues/22"
+      }
+    ],
+    "headRefName": "feat/22-tui-layout",
+    "isDraft": false,
+    "mergedAt": "2026-10-02T16:30:47Z",
+    "number": 23,
+    "reviewDecision": "",
+    "state": "MERGED",
+    "statusCheckRollup": [],
+    "title": "feat(tui): Layout entzerren, Worktrees/Branches gruppieren, Repo-Pfad anzeigen",
+    "updatedAt": "2026-10-02T16:30:53Z",
+    "url": "https://github.com/comcy/kvasir/pull/23"
+  },
+  {
+    "author": {
+      "is_bot": false,
+      "login": "comcy"
+    },
+    "closingIssuesReferences": [
+      {
+        "number": 9,
+        "repository": {
+          "owner": {
+            "login": "comcy"
+          }
+        },
+        "url": "https://github.com/comcy/kvasir/issues/9"
+      }
+    ],
+    "headRefName": "feat/9-notizen",
+    "isDraft": false,
+    "mergedAt": "2026-10-01T22:36:19Z",
+    "number": 20,
+    "reviewDecision": "",
+    "state": "MERGED",
+    "statusCheckRollup": [],
+    "title": "feat(notes): Notizen pro Worktree (m) und Abschlussnotiz beim Entfernen",
+    "updatedAt": "2026-10-01T22:36:26Z",
+    "url": "https://github.com/comcy/kvasir/pull/20"
+  },
+  {
+    "author": {
+      "is_bot": false,
+      "login": "comcy"
+    },
+    "closingIssuesReferences": [
+      {
+        "number": 6,
+        "repository": {
+          "owner": {
+            "login": "comcy"
+          }
+        },
+        "url": "https://github.com/comcy/kvasir/issues/6"
+      }
+    ],
+    "headRefName": "feat/6-neuer-worktree",
+    "isDraft": false,
+    "mergedAt": "2026-10-01T22:33:03Z",
+    "number": 19,
+    "reviewDecision": "",
+    "state": "MERGED",
+    "statusCheckRollup": [],
+    "title": "feat(tui): add new worktree dialog (n)",
+    "updatedAt": "2026-10-01T22:33:11Z",
+    "url": "https://github.com/comcy/kvasir/pull/19"
+  }
+]

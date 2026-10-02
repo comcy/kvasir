@@ -1,0 +1,32 @@
+[
+  {
+    "conclusion": "success",
+    "event": "push",
+    "headBranch": "master",
+    "startedAt": "2026-04-04T08:14:15Z",
+    "status": "completed",
+    "updatedAt": "2026-04-04T08:16:21Z",
+    "url": "https://github.com/comcy/skiclub-kapfenburg.de/actions/runs/23974975317",
+    "workflowName": "SCK-WEB Workflow"
+  },
+  {
+    "conclusion": "failure",
+    "event": "push",
+    "headBranch": "master",
+    "startedAt": "2026-04-04T08:14:14Z",
+    "status": "completed",
+    "updatedAt": "2026-04-04T08:14:14Z",
+    "url": "https://github.com/comcy/skiclub-kapfenburg.de/actions/runs/23974975160",
+    "workflowName": ".github/workflows/sck-api-build.yml"
+  },
+  {
+    "conclusion": "failure",
+    "event": "dynamic",
+    "headBranch": "master",
+    "startedAt": "2026-02-07T14:56:46Z",
+    "status": "completed",
+    "updatedAt": "2026-02-07T14:57:43Z",
+    "url": "https://github.com/comcy/skiclub-kapfenburg.de/actions/runs/21781950936",
+    "workflowName": "Dependabot Updates"
+  }
+]
