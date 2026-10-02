@@ -9,8 +9,8 @@ from typing import ClassVar
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal
-from textual.widgets import Footer, OptionList
+from textual.containers import Horizontal, Vertical
+from textual.widgets import Footer, OptionList, Static
 
 from kvasir import notes
 from kvasir.config import RepoConfig, load_local, load_repos
@@ -19,6 +19,7 @@ from kvasir.open_terminal import OpenTerminalError, open_terminal
 from kvasir.sync import fetch, pull
 from kvasir.tui.columns import DetailPanel, EntryList, RepoList
 from kvasir.tui.data import RepoRow, load_rows
+from kvasir.tui.layout import group_entries, tilde
 from kvasir.tui.new_worktree_screen import NewWorktreeScreen
 from kvasir.tui.note_screen import NoteScreen
 from kvasir.worktrees import Worktree
@@ -27,9 +28,15 @@ from kvasir.worktrees import Worktree
 class KvasirApp(App):
     CSS = """
     Horizontal { height: 1fr; }
-    RepoList { width: 1fr; min-width: 12; }
-    EntryList { width: 2fr; min-width: 12; }
-    DetailPanel { width: 1fr; min-width: 12; padding: 0 1; border-left: solid $primary; }
+    #pathbar { height: 1; padding: 0 1; color: $text-muted; }
+    .col { height: 1fr; }
+    #repos-col { width: 2fr; min-width: 10; }
+    #entries-col { width: 3fr; min-width: 10; border-left: solid $primary; }
+    #detail-col { width: 2fr; min-width: 8; border-left: solid $primary; }
+    .narrow #detail-col { display: none; }
+    .colhead { height: 1; padding: 0 1; text-style: bold; background: $boost; }
+    RepoList, EntryList { height: 1fr; padding: 0 1; }
+    DetailPanel { height: 1fr; padding: 0 1; }
     """
     BINDINGS: ClassVar[list[Binding]] = [
         Binding("q", "quit", "Quit"),
@@ -39,6 +46,7 @@ class KvasirApp(App):
         Binding("p", "pull", "Pull"),
         Binding("x", "remove_worktree", "Remove"),
         Binding("m", "note", "Note"),
+        Binding("b", "toggle_remote", "Remote branches"),
         Binding("h", "focus_previous", "Left", show=False),
         Binding("l", "focus_next", "Right", show=False),
     ]
@@ -46,16 +54,27 @@ class KvasirApp(App):
     def __init__(self) -> None:
         super().__init__()
         self.rows: list[RepoRow] = []
-        self.entries: list = []
+        self.entries: list = []  # visible entries, flat, without headings
+        self.show_remote = False  # Remote-Branches collapsed by default; survives reloads
         self._mark: tuple[str, Path] | None = None  # (repo url, new worktree path) to highlight after reload
         self.sync: dict[str, tuple[float | None, str | None]] = {}  # url -> (last fetch ts, error)
 
     def compose(self) -> ComposeResult:
+        yield Static("", id="pathbar")
         with Horizontal():
-            yield RepoList(id="repos")
-            yield EntryList(id="entries")
-            yield DetailPanel(id="detail")
+            with Vertical(id="repos-col", classes="col"):
+                yield Static("Repos", classes="colhead")
+                yield RepoList(id="repos")
+            with Vertical(id="entries-col", classes="col"):
+                yield Static("Worktrees & Branches", classes="colhead")
+                yield EntryList(id="entries")
+            with Vertical(id="detail-col", classes="col"):
+                yield Static("Details", classes="colhead")
+                yield DetailPanel(id="detail")
         yield Footer()
+
+    def on_resize(self) -> None:
+        self.set_class(self.size.width < 80, "narrow")  # no room for the Details column
 
     def on_mount(self) -> None:
         self.query_one(RepoList).focus()
@@ -83,8 +102,8 @@ class KvasirApp(App):
         self.action_reload()  # ahead/behind and branches change after a fetch
 
     def action_pull(self) -> None:
-        i = self.query_one(EntryList).highlighted
-        wt = self.entries[i] if i is not None and i < len(self.entries) else None
+        i = self.query_one(EntryList).current_entry()
+        wt = self.entries[i] if i is not None else None
         if not isinstance(wt, Worktree) or wt.broken:
             self.notify("select a worktree to pull", severity="warning")
             return
@@ -108,7 +127,7 @@ class KvasirApp(App):
     def _loaded(self, rows: list[RepoRow]) -> None:
         self.rows = rows
         repos, entries = self.query_one(RepoList), self.query_one(EntryList)
-        keep_repo, keep_entry = repos.highlighted or 0, entries.highlighted or 0  # survive reloads
+        keep_repo, keep_entry = repos.highlighted or 0, entries.current_entry() or 0  # survive reloads
         keep_repo = keep_repo if keep_repo < len(rows) else 0
         if self._mark:  # a new worktree was just created: jump to it
             keep_repo = next((i for i, r in enumerate(rows) if r.url == self._mark[0]), keep_repo)
@@ -123,8 +142,8 @@ class KvasirApp(App):
         from kvasir.tui.remove_screen import RemoveScreen
         from kvasir.worktrees import Worktree
 
-        ri, ei = self.query_one(RepoList).highlighted, self.query_one(EntryList).highlighted
-        if ri is None or ei is None or ei >= len(self.entries) or not self.rows[ri].path:
+        ri, ei = self.query_one(RepoList).highlighted, self.query_one(EntryList).current_entry()
+        if ri is None or ei is None or not self.rows[ri].path:
             return
         wt = self.entries[ei]
         if isinstance(wt, Worktree):
@@ -132,16 +151,15 @@ class KvasirApp(App):
 
     def _show_entries(self, idx: int | None, keep: int = 0) -> None:
         row = self.rows[idx] if idx is not None and idx < len(self.rows) else None
-        self.entries = [*row.view.worktrees, *row.view.branches] if row and row.view else []
-        lst = self.query_one(EntryList)
-        lst.set_entries(self.entries, notes.latest_by_branch(row.url) if row else {})
+        groups = group_entries(row.view, self.show_remote) if row and row.view else []
+        self.entries = [e for g in groups for e in g.visible]
+        self.query_one("#pathbar", Static).update(tilde(row.path) if row and row.path else "")
         if self.entries:
             keep = keep if keep < len(self.entries) else 0
             if self._mark:
                 keep = next((i for i, e in enumerate(self.entries)
                              if getattr(e, "path", None) == self._mark[1]), keep)
-            with lst.prevent(OptionList.OptionHighlighted):
-                lst.highlighted = keep
+        self.query_one(EntryList).set_entries(groups, notes.latest_by_branch(row.url) if row else {}, keep)
         self._show_detail(self.entries[keep] if self.entries else None)
 
     def _show_detail(self, item) -> None:
@@ -150,9 +168,13 @@ class KvasirApp(App):
         name = getattr(item, "branch", None) or getattr(item, "name", None)
         self.query_one(DetailPanel).show(item, notes.latest(url, name) if name else None)
 
+    def action_toggle_remote(self) -> None:
+        self.show_remote = not self.show_remote
+        self._show_entries(self.query_one(RepoList).highlighted, self.query_one(EntryList).current_entry() or 0)
+
     def action_note(self) -> None:
-        ri, ei = self.query_one(RepoList).highlighted, self.query_one(EntryList).highlighted
-        if ri is None or ei is None or ei >= len(self.entries):
+        ri, ei = self.query_one(RepoList).highlighted, self.query_one(EntryList).current_entry()
+        if ri is None or ei is None:
             return
         url, item = self.rows[ri].url, self.entries[ei]
         name = getattr(item, "branch", None) or getattr(item, "name", None)
@@ -187,13 +209,18 @@ class KvasirApp(App):
         if ev.option_list.id == "repos":
             self._show_entries(ev.option_index)
         elif ev.option_list.id == "entries":
-            self._show_detail(self.entries[ev.option_index])
+            i = ev.option_list.index_map[ev.option_index]
+            if i is not None:
+                self._show_detail(self.entries[i])
 
     def on_option_list_option_selected(self, ev: OptionList.OptionSelected) -> None:
         """Enter on an entry: open a terminal in the Worktree."""
         if ev.option_list.id != "entries":
             return
-        entry = self.entries[ev.option_index]
+        i = ev.option_list.index_map[ev.option_index]
+        if i is None:
+            return
+        entry = self.entries[i]
         if not isinstance(entry, Worktree) or entry.broken:
             self.notify("Kein Worktree: neuen Worktree anlegen (n).", severity="warning")
             return

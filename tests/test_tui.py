@@ -1,11 +1,13 @@
 import asyncio
 import subprocess
+from pathlib import Path
 
 from kvasir.config import LocalConfig, RepoConfig, save_local, save_repos
 from kvasir.tui.app import KvasirApp
 from kvasir.tui.columns import DetailPanel, EntryList, RepoList
 from kvasir.tui.data import format_age, load_rows
-from kvasir.worktrees import Branch
+from kvasir.tui.layout import fit, format_entry, group_entries, name_width, short_name, tilde
+from kvasir.worktrees import Branch, RepoView, Worktree
 
 
 def test_format_age():
@@ -40,15 +42,15 @@ def test_app_selecting_repo_loads_middle_column(make_repo):
 
     async def run():
         app = KvasirApp()
-        async with app.run_test(size=(40, 15)) as pilot:  # narrow terminal
+        async with app.run_test(size=(100, 15)) as pilot:
             for _ in range(50):
                 await pilot.pause(0.1)
                 if app.rows:
                     break
             repos, entries = app.query_one(RepoList), app.query_one(EntryList)
             assert repos.option_count == 2
-            assert entries.option_count == 1  # repo "a" selected first
-            assert "main" in str(entries.get_option_at_index(0).prompt)
+            assert entries.option_count == 2  # heading + main; repo "a" selected first
+            assert "main" in str(entries.get_option_at_index(1).prompt)
             assert "main" in str(app.query_one(DetailPanel).render())
             await pilot.press("down")  # "gone": not found, empty middle
             await pilot.pause()
@@ -66,7 +68,7 @@ def test_app_f_fetches_and_shows_last_fetch(make_repo):
 
     async def run():
         app = KvasirApp()
-        async with app.run_test(size=(80, 15)) as pilot:
+        async with app.run_test(size=(120, 15)) as pilot:
             for _ in range(50):
                 await pilot.pause(0.1)
                 if app.rows:
@@ -104,7 +106,8 @@ def test_enter_opens_terminal_or_hints(make_repo, monkeypatch):
             app.entries.append(Branch("feat/x", False, None, ""))
             entries = app.query_one(EntryList)
             entries.add_option("x")
-            entries.highlighted = 1
+            entries.index_map.append(1)
+            entries.highlighted = 2
             await pilot.press("enter")
             await pilot.pause()
             assert len(opened) == 1 and "Worktree" in notes[0]
@@ -137,7 +140,85 @@ def test_new_worktree_dialog(make_repo):
                 if (root / "feat" / "cool-thing").is_dir() and len(app.entries) == 2:
                     break
             assert (root / "feat" / "cool-thing").is_dir()
-            hl = app.query_one(EntryList).highlighted
+            hl = app.query_one(EntryList).current_entry()
             assert getattr(app.entries[hl], "branch", None) == "feat/cool-thing"
+
+    asyncio.run(run())
+
+
+def test_layout_pure_functions():
+    assert short_name("github.com/owner/name") == "owner/name"
+    assert short_name("solo") == "solo"
+    assert tilde(Path("/h/u/ws/x"), Path("/h/u")) == "~/ws/x"
+    assert tilde(Path("/h/u"), Path("/h/u")) == "~"
+    assert tilde(Path("/etc/x"), Path("/h/u")) == "/etc/x"
+    assert fit("abc", 5) == "abc  " and fit("abcdef", 4) == "abc…" and fit("x", 0) == ""
+    assert name_width(["a"], 100) == 1
+    assert name_width(["x" * 50], 100) == 40  # capped at 40%
+    assert name_width(["x" * 50], 10) == 8  # cap floor
+    assert name_width(["x" * 20], 100) == 20
+    wt = Worktree(Path("/r/main"), "main", commit_ts=0, subject="subj", staged=1, unstaged=2, untracked=3)
+    line = format_entry(wt, 10, "note")
+    assert line.startswith("main      ") and "+1 ~2 ?3" in line and line.endswith("subj  ✎ note")
+
+
+def test_group_entries():
+    view = RepoView([Worktree(Path("/r/a"), "a")], [Branch("l", False, None, ""), Branch("origin/r", True, None, "")])
+    g = group_entries(view, show_remote=False)
+    assert [x.header for x in g] == ["Worktrees (1)", "Branches ohne Worktree (1)", "▸ Remote-Branches (1)  (b: show)"]
+    assert [len(x.visible) for x in g] == [1, 1, 0]
+    assert group_entries(view, True)[2].header == "▾ Remote-Branches (1)"
+    assert [x.key for x in group_entries(RepoView([Worktree(Path("/r/a"), "a")], []), False)] == ["worktrees"]
+
+
+def test_app_groups_skip_headings_toggle_remote_and_keep_selection(make_repo):
+    root = _register(make_repo)
+    for ref in ("refs/heads/loc", "refs/remotes/origin/r1", "refs/remotes/origin/r2"):
+        subprocess.run(["git", "-C", str(root), "update-ref", ref, "main"], check=True)
+
+    async def run():
+        app = KvasirApp()
+        async with app.run_test(size=(100, 20)) as pilot:
+            for _ in range(50):
+                await pilot.pause(0.1)
+                if app.rows:
+                    break
+            lst = app.query_one(EntryList)
+            heads = [str(lst.get_option_at_index(i).prompt).strip() for i, e in enumerate(lst.index_map) if e is None]
+            assert heads == ["Worktrees (1)", "Branches ohne Worktree (1)", "▸ Remote-Branches (2)  (b: show)"]
+            assert [getattr(e, "name", None) or e.branch for e in app.entries] == ["main", "loc"]
+            await pilot.press("l")  # focus entries
+            await pilot.press("down")  # skips the "Branches ohne Worktree" heading
+            assert app.entries[lst.current_entry()].name == "loc"
+            await pilot.press("b")
+            await pilot.pause()
+            assert len(app.entries) == 4 and lst.option_count == 3 + 4
+            await pilot.press("down")  # skips the Remote heading
+            assert app.entries[lst.current_entry()].name == "origin/r1"
+            await pilot.press("r")  # reload keeps selection and expanded state
+            for _ in range(20):
+                await pilot.pause(0.1)
+            assert app.entries[lst.current_entry()].name == "origin/r1"
+            await pilot.press("b")
+            await pilot.pause()
+            assert len(app.entries) == 2 and app.show_remote is False
+
+    asyncio.run(run())
+
+
+def test_narrow_terminal_hides_details_without_breaking(make_repo):
+    _register(make_repo)
+
+    async def run():
+        app = KvasirApp()
+        async with app.run_test(size=(40, 20)) as pilot:
+            for _ in range(50):
+                await pilot.pause(0.1)
+                if app.rows:
+                    break
+            await pilot.pause()
+            assert not app.query_one("#detail-col").display
+            assert app.query_one("#entries-col").size.width >= 10
+            assert len(app.entries) == 1
 
     asyncio.run(run())
