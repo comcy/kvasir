@@ -1,0 +1,20 @@
+{
+  "assignees": [],
+  "labels": [
+    {
+      "name": "enhancement",
+      "description": "New feature or request",
+      "color": "a2eeef"
+    },
+    {
+      "name": "ready-for-agent",
+      "description": "Fully specified, ready for an AFK agent",
+      "color": "FEF2C0"
+    }
+  ],
+  "number": 27,
+  "projectItems": [],
+  "state": "OPEN",
+  "title": "Plattform-Fundament: gh-Zugriff, Datenmodell, Cache (GitHub)",
+  "url": "https://github.com/comcy/kvasir/issues/27"
+}
