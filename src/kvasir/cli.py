@@ -139,7 +139,11 @@ def setup(
         if local.open_command is None:
             local.open_command = typer.prompt("Open command", default=default_open_command())
     if pattern:
-        cfg.branch_patterns = list(pattern)
+        try:
+            cfg.branch_patterns = validate_patterns(pattern)
+        except ValueError as e:
+            typer.echo(str(e), err=True)
+            raise typer.Exit(1) from e
     if fetch_interval is not None:
         cfg.fetch_interval = fetch_interval
     if platform_interval is not None:
