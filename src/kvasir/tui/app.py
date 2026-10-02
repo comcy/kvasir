@@ -52,7 +52,7 @@ class KvasirApp(App):
         Binding("x", "remove_worktree", "Remove"),
         Binding("m", "note", "Note"),
         Binding("b", "toggle_remote", "Remote"),
-        Binding("u", "refresh_platform", "GitHub"),
+        Binding("u", "refresh_platform", "Plattform"),
         Binding("i", "overview", "Overview"),
         Binding("e", "edit_repo", "Edit"),
         Binding("h", "focus_previous", "Left", show=False),
@@ -66,7 +66,7 @@ class KvasirApp(App):
         self.show_remote = False  # Remote-Branches collapsed by default; survives reloads
         self._mark: tuple[str, Path] | None = None  # (repo url, new worktree path) to highlight after reload
         self.sync: dict[str, tuple[float | None, str | None]] = {}  # url -> (last fetch ts, error)
-        self.platform: dict[str, platform_data.Snapshot] = {}  # url -> cached GitHub data (only detected repos)
+        self.platform: dict[str, platform_data.Snapshot] = {}  # url -> cached platform data (only detected repos)
         self._platform_error: dict[str, Error | None] = {}
         self._platform_busy: set[str] = set()
         self._platform_started = False
@@ -96,7 +96,7 @@ class KvasirApp(App):
         row = self.rows[ri] if ri is not None and ri < len(self.rows) else None
         snap = self.platform.get(row.url) if row else None
         gh = snap.fetched_at.timestamp() if snap and snap.fetched_at else None
-        status = data_status(self.sync.get(row.url, (None, None))[0], gh) if row else ""
+        status = data_status(self.sync.get(row.url, (None, None))[0], gh, cli=snap.cli if snap else "gh") if row else ""
         text = header_text(short_name(row.url) if row else "", tilde(row.path) if row and row.path else "",
                            status, max(1, self.size.width - 2))
         self.query_one("#header", Static).update(Text(text, no_wrap=True, overflow="ellipsis"))
@@ -161,7 +161,7 @@ class KvasirApp(App):
         self.action_reload()  # ahead/behind and branches change after a fetch
 
     def _start_platform(self) -> None:
-        """First load done: one refresh per GitHub repo now, then per `platform_interval`."""
+        """First load done: one refresh per repo with a platform now, then per `platform_interval`."""
         self._platform_started = True
         cfgs = load_repos()
         for row in self.rows:
@@ -174,7 +174,7 @@ class KvasirApp(App):
         urls = [r.url for r in self.rows if platform_data.platform_of(r.url)]
         for url in urls:
             self._refresh_platform_url(url)
-        self.notify("refreshing platform data ..." if urls else "no GitHub repo registered")
+        self.notify("refreshing platform data ..." if urls else "no GitHub/Azure DevOps repo registered")
 
     def _refresh_platform_url(self, url: str) -> None:
         row = next((r for r in self.rows if r.url == url), None)

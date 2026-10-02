@@ -102,11 +102,11 @@ def _ago(ts: float | None, now: float | None) -> str:
     return "gerade eben" if age == "now" else f"vor {age}"
 
 
-def data_status(fetch_ts: float | None, gh_ts: float | None, now: float | None = None) -> str:
-    """Age of the data: `gefetcht vor 3m · gh vor 5m` (gh part only for GitHub Repos)."""
+def data_status(fetch_ts: float | None, gh_ts: float | None, now: float | None = None, cli: str = "gh") -> str:
+    """Age of the data: `gefetcht vor 3m · gh vor 5m` (platform part only for Repos with a platform; `az` for Azure)."""
     parts = ["nicht gefetcht" if fetch_ts is None else f"gefetcht {_ago(fetch_ts, now)}"]
     if gh_ts is not None:
-        parts.append(f"gh {_ago(gh_ts, now)}")
+        parts.append(f"{cli} {_ago(gh_ts, now)}")
     return " · ".join(parts)
 
 

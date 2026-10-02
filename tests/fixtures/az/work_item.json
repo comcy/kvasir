@@ -1,0 +1,25 @@
+{
+  "id": 101,
+  "rev": 7,
+  "fields": {
+    "System.AreaPath": "Shop",
+    "System.TeamProject": "Shop",
+    "System.WorkItemType": "User Story",
+    "System.State": "Active",
+    "System.BoardColumn": "In Progress",
+    "System.BoardColumnDone": false,
+    "System.Title": "Rabatte im Warenkorb",
+    "System.Tags": "checkout; backend",
+    "System.AssignedTo": {
+      "displayName": "Anna Beispiel",
+      "uniqueName": "anna@example.com",
+      "id": "00000000-0000-0000-0000-000000000003"
+    }
+  },
+  "url": "https://dev.azure.com/contoso/_apis/wit/workItems/101",
+  "_links": {
+    "html": {
+      "href": "https://dev.azure.com/contoso/x/_workitems/edit/101"
+    }
+  }
+}

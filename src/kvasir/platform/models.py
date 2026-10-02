@@ -9,7 +9,8 @@ T = TypeVar("T")
 
 
 class ErrorKind(Enum):
-    MISSING_CLI = "cli_missing"  # gh not installed
+    MISSING_CLI = "cli_missing"  # gh / az not installed
+    MISSING_EXTENSION = "extension_missing"  # az without the azure-devops extension
     NOT_LOGGED_IN = "not_logged_in"
     MISSING_SCOPE = "missing_scope"  # token lacks a permission, e.g. read:project
     NETWORK = "network"  # incl. timeout
@@ -21,6 +22,7 @@ class ErrorKind(Enum):
 class Error:
     kind: ErrorKind
     message: str = ""
+    cli: str = "gh"  # which CLI failed: "gh" | "az" (picks the hint text)
 
 
 @dataclass(frozen=True)
@@ -83,7 +85,7 @@ class PipelineRun:
 
 
 class Provider(Protocol):
-    """What the UI needs from a platform. GitHub now, Azure DevOps (#26) later."""
+    """What the UI needs from a platform. GitHub (gh) and Azure DevOps (az)."""
 
     def pull_requests(self, limit: int = 30) -> Result[list[PullRequest]]: ...
     def work_item(self, number: int) -> Result[WorkItem]: ...

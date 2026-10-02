@@ -219,5 +219,76 @@ def test_app_no_cache_no_gh_shows_hint_not_none(make_repo):
     asyncio.run(go())
 
 
-def test_platform_of_azure_not_supported_yet():
-    assert pd.platform_of("dev.azure.com/org/proj/_git/repo") is None
+def test_platform_of_github_and_azure():
+    assert pd.platform_of("github.com/o/r").kind == "github"
+    assert pd.platform_of("dev.azure.com/org/proj/_git/repo").kind == "azure"
+    assert pd.platform_of("gitlab.com/o/r") is None
+
+
+# --- Azure DevOps (#43) ---
+
+AZ = "dev.azure.com/org/proj/_git/repo"
+
+
+def _register_az(make_repo):
+    root = make_repo("z", bare_layout=True, remote="https://dev.azure.com/org/proj/_git/repo")
+    subprocess.run(["git", "-C", str(root), "worktree", "add", "-q", "main", "main"], check=True)
+    save_repos({AZ: RepoConfig()})
+    save_local(LocalConfig(paths={AZ: str(root)}))
+
+
+def test_platform_texts_name_the_cli():
+    e = Error(ErrorKind.MISSING_EXTENSION, "x", "az")
+    assert pv.hint(e) == "Erweiterung azure-devops fehlt"
+    assert pv.hint(Error(ErrorKind.NOT_LOGGED_IN, "x", "az")) == "az nicht angemeldet"
+    assert pv.hint(Error(ErrorKind.MISSING_CLI, "x", "az")) == "az nicht gefunden"
+    assert pv.hint(Error(ErrorKind.MISSING_CLI)) == "gh nicht gefunden"  # GitHub texts unchanged
+    snap = pd.Snapshot([], [], {}, [], None, e, "az")
+    assert pv.repo_line(snap) == "az: noch nicht geladen\nErweiterung azure-devops fehlt"
+    assert "az: aktualisiert vor" in pv.repo_line(pd.Snapshot([], [], {}, [], datetime.now(UTC), None, "az"))
+    assert pd.snapshot(AZ, [], ["main"]).cli == "az" and pd.snapshot(URL, [], ["main"]).cli == "gh"
+
+
+def test_header_status_names_cli():
+    from kvasir.tui.layout import data_status
+    assert data_status(0, 0, now=180, cli="az") == "gefetcht vor 3m · az vor 3m"
+
+
+def test_refresh_azure_with_fake_provider():
+    f = Fake([pr(branch="feature/101-x", closing_issues=(101,))], [run("feature/101-x")],
+             {101: WorkItem(101, "Rabatte", "open", "u", board_status="In Progress")})
+    assert pd.refresh(AZ, ["feature/{id}-{slug}"], ["feature/101-x"], f) is None
+    s = pd.snapshot(AZ, ["feature/{id}-{slug}"], ["feature/101-x"])
+    assert s.info("feature/101-x").work_item.board_status == "In Progress" and s.cli == "az"
+
+
+def test_app_azure_repo_marker_detail_and_errors(make_repo, monkeypatch):
+    _register_az(make_repo)
+    f = Fake([pr(13, checks="failure")], [run(conclusion="failure")])
+    monkeypatch.setattr("kvasir.tui.platform_data.provider_for", lambda repo: f)
+
+    async def go():
+        app = KvasirApp()
+        async with app.run_test(size=(120, 25)) as pilot:
+            await _wait(pilot, lambda: "#13 ✗" in str(app.query_one(EntryList).get_option_at_index(1).prompt))
+            assert "PR #13  Fix it" in str(app.query_one(DetailPanel).content)
+            assert "az: aktualisiert vor" in str(app.query_one(RepoList).get_option_at_index(0).prompt)
+
+    asyncio.run(go())
+
+
+def test_app_azure_repo_error_state(make_repo, monkeypatch):
+    _register_az(make_repo)
+    cache.write(AZ, "pull_requests", [pr()])
+    f = Fake(error=Error(ErrorKind.MISSING_EXTENSION, "x", "az"))
+    monkeypatch.setattr("kvasir.tui.platform_data.provider_for", lambda repo: f)
+
+    async def go():
+        app = KvasirApp()
+        async with app.run_test(size=(120, 25)) as pilot:
+            await _wait(pilot, lambda: app.platform.get(AZ) and app.platform[AZ].error)
+            line = str(app.query_one(RepoList).get_option_at_index(0).prompt)
+            assert "Erweiterung" in line and "az: aktualisiert vor" in line  # hint + old state
+            assert "#12" in str(app.query_one(EntryList).get_option_at_index(1).prompt)
+
+    asyncio.run(go())

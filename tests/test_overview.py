@@ -97,7 +97,7 @@ def test_sections_three_blocks_and_width():
 
 
 def test_status_text():
-    assert od.status_text(od.Overview(), 0) == "Kein GitHub-Repo registriert."
+    assert od.status_text(od.Overview(), 0) == "Kein GitHub-/Azure-DevOps-Repo registriert."
     assert "noch nicht geladen" in od.status_text(od.Overview(), 1)
     ov = od.Overview(fetched_at=NOW, error=Error(ErrorKind.MISSING_CLI))
     t = od.status_text(ov, 1, NOW.timestamp() + 180)
@@ -160,7 +160,7 @@ def test_refresh_error_keeps_old_cache(monkeypatch):
 
 def test_refresh_without_gh_or_github_repo():
     assert od.refresh([URL]).kind is ErrorKind.MISSING_CLI  # conftest default: gh missing
-    assert od.refresh(["dev.azure.com/o/p/r"]) is None
+    assert od.refresh(["gitlab.com/o/r"]) is None  # unsupported host: nothing to ask
 
 
 def test_is_stale():
@@ -263,6 +263,80 @@ def test_page_hints_without_gh_and_without_github_repo(make_repo):
         async with app.run_test(size=(140, 30)) as pilot:
             await pilot.pause(0.3)
             await pilot.press("i")
-            assert "Kein GitHub-Repo" in str(app.screen.query_one("#ov-status").content)
+            assert "Kein GitHub-/Azure-DevOps-Repo" in str(app.screen.query_one("#ov-status").content)
 
     asyncio.run(go())
+
+
+# --- mixed GitHub + Azure DevOps (#43) ---
+
+AZ1 = "dev.azure.com/org/proj/_git/r1"
+AZ2 = "dev.azure.com/org/proj/_git/r2"  # same project: one search for both
+AZ3 = "dev.azure.com/org/other/_git/r3"
+
+
+def _two(monkeypatch, gh, az):
+    monkeypatch.setattr("kvasir.tui.platform_data.provider_for", lambda repo: gh if repo.kind == "github" else az)
+
+
+def test_platform_repos_and_scopes():
+    assert od.platform_repos([URL, AZ1, "gitlab.com/o/r"]) == {"o/a": URL, "org/proj/r1": AZ1}
+
+
+def test_refresh_mixed_repos_merges_by_project_and_caps(monkeypatch):
+    def t(h):
+        return (NOW - timedelta(hours=h)).isoformat()
+
+    def az_pr(n, repo, at):
+        return replace(spr(n, repo), created_at=at, url=f"https://az/{repo}/{n}")
+
+    gh = Fake(mine=[spr(1)], details={1: full(1, review="approved")}, runs=[run()])
+    proj = Fake(mine=[az_pr(7, "org/proj/r1", t(1)), az_pr(8, "org/proj/r2", t(5)), az_pr(10, "org/proj/zz", t(1))],
+                reviews=[az_pr(11, "org/proj/r2", t(2))],
+                details={7: full(7, "org/proj/r1"), 8: full(8, "org/proj/r2"), 11: full(11, "org/proj/r2")},
+                runs=[run(started=t(1))])
+    other = Fake(mine=[az_pr(9, "org/other/r3", t(2))], details={9: full(9, "org/other/r3")})
+    monkeypatch.setattr("kvasir.tui.platform_data.provider_for",
+                        lambda repo: gh if repo.kind == "github" else {"proj": proj, "other": other}[repo.project])
+    assert od.refresh([URL, AZ1, AZ2, AZ3]) is None
+    assert proj.calls.count("mine") == 1 and other.calls.count("mine") == 1 and gh.calls.count("mine") == 1
+    ov = od.snapshot([URL, AZ1, AZ2, AZ3])
+    assert [p.created_at for p in ov.mine] == sorted((p.created_at for p in ov.mine), reverse=True)  # merged, newest first
+    assert sorted(p.number for p in ov.mine) == [1, 7, 8, 9]  # 10: azure repo not registered
+    assert [p.number for p in ov.reviews] == [11]
+    assert {r.repo for r in ov.runs} == {"o/a", "org/proj/r1", "org/proj/r2"}
+    assert [p.number for p in od.snapshot([AZ1]).mine] == [7]  # only the registered azure repo
+
+
+def test_refresh_one_search_per_azure_project(monkeypatch):
+    made = []
+
+    def provider_for(repo):
+        f = Fake(mine=[], runs=[])
+        made.append((repo.slug, f))
+        return f
+
+    monkeypatch.setattr("kvasir.tui.platform_data.provider_for", provider_for)
+    assert od.refresh([AZ1, AZ2, AZ3]) is None
+    searched = [slug for slug, f in made if "mine" in f.calls]
+    assert searched == ["org/proj/r1", "org/other/r3"]  # r2 shares the project of r1
+
+
+def test_refresh_mixed_one_platform_failing_keeps_the_other(monkeypatch):
+    e = Error(ErrorKind.MISSING_EXTENSION, "x", "az")
+    gh = Fake(mine=[spr(1)], details={1: full(1)}, runs=[run()])
+    az = Fake(error=e)
+    _two(monkeypatch, gh, az)
+    assert od.refresh([URL, AZ1]) == e
+    ov = od.snapshot([URL, AZ1], e)
+    assert [p.number for p in ov.mine] == [1] and ov.runs[0].repo == "o/a"
+    assert "azure-devops" in od.status_text(ov, 2) and "az extension add" in od.status_text(ov, 2)
+
+
+def test_refresh_azure_only_all_failing_keeps_old_cache(monkeypatch):
+    cache.write(od.KEY, "my_prs", [full(5, "org/proj/r1")])
+    e = Error(ErrorKind.NOT_LOGGED_IN, "x", "az")
+    _two(monkeypatch, None, Fake(error=e))
+    assert od.refresh([AZ1]) == e
+    assert od.snapshot([AZ1], e).mine[0].number == 5
+    assert "az login" in od.status_text(od.Overview(error=e), 1)

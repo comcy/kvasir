@@ -1,7 +1,7 @@
 """Data and text for the overview page (#29): my PRs, review requests, my pipeline runs. No Textual.
 
-`refresh` talks to GitHub (blocking, run in a worker) and fills `platform_cache.json` under the pseudo
-repo key `overview`; `snapshot` reads only the cache. Only registered GitHub Repos are shown.
+`refresh` talks to the platforms (blocking, run in a worker) and fills `platform_cache.json` under the pseudo
+repo key `overview`; `snapshot` reads only the cache. Registered GitHub and Azure DevOps Repos are shown.
 """
 from __future__ import annotations
 
@@ -24,6 +24,11 @@ HINTS = {
     ErrorKind.MISSING_CLI: "gh nicht gefunden: GitHub CLI installieren (https://cli.github.com)",
     ErrorKind.NOT_LOGGED_IN: "gh nicht angemeldet: `gh auth login` ausführen",
 }
+AZ_HINTS = {
+    ErrorKind.MISSING_CLI: "az nicht gefunden: Azure CLI installieren (https://aka.ms/installazurecli)",
+    ErrorKind.NOT_LOGGED_IN: "az nicht angemeldet: `az login` ausführen",
+    ErrorKind.MISSING_EXTENSION: "Erweiterung azure-devops fehlt: `az extension add --name azure-devops`",
+}
 SECTIONS = ("Meine offenen PRs", "Zum Review angefragt", f"Meine Pipeline-Läufe (letzte {RUN_DAYS} Tage)")
 
 
@@ -44,14 +49,14 @@ class Entry:
     branch: str | None
 
 
-def github_repos(urls: list[str]) -> dict[str, str]:
-    """Registered Repo urls -> {lower-case `owner/name`: url}; non-GitHub Repos are left out."""
-    out = {}
-    for u in urls:
-        p = platform_data.platform_of(u)
-        if p and p.kind == "github":
-            out[p.slug.lower()] = u
-    return out
+def platform_repos(urls: list[str]) -> dict[str, str]:
+    """Registered Repo urls -> {lower-case slug (`owner/repo`, `org/project/repo`): url}; unknown hosts are left out."""
+    return {p.slug.lower(): u for u in urls if (p := platform_data.platform_of(u))}
+
+
+def _scope(plat: PlatformRepo) -> str:
+    """One search covers a scope: GitHub searches all my repos, Azure DevOps one project (no org-wide search)."""
+    return plat.kind if plat.kind == "github" else f"azure:{plat.org}/{plat.project}".lower()
 
 
 def _only(items: list, slugs) -> list:
@@ -65,7 +70,7 @@ def _cached(query: str, cls: type) -> tuple[list, datetime | None]:
 
 def snapshot(urls: list[str], error: Error | None = None) -> Overview:
     """Cache-only view (no network)."""
-    slugs = github_repos(urls)
+    slugs = platform_repos(urls)
     mine, at = _cached("my_prs", PullRequest)
     reviews, _ = _cached("review_requests", PullRequest)
     runs, _ = _cached("pipeline_runs", PipelineRun)
@@ -76,18 +81,33 @@ def refresh(urls: list[str]) -> Error | None:
     """Fetch the three lists into the cache. Blocking; returns the first error (None = fine).
 
     `gh search prs` has no review decision/checks/branch, so every shown PR (max MAX_ITEMS per list) gets
-    one `gh pr view`. A search or fatal error keeps the old cache entry of that list."""
-    slugs = github_repos(urls)
-    providers = {s: platform_data.provider_for(PlatformRepo("github", s)) for s in slugs}
+    one `pull_request` call. A search fails -> that scope is skipped; all scopes failed or a fatal PR error
+    keeps the old cache entry of that list."""
+    slugs = platform_repos(urls)
+    plats = {s: platform_data.platform_of(u) for s, u in slugs.items()}
+    providers = {s: platform_data.provider_for(p) for s, p in plats.items()}
     if not providers:
         return None
-    first, err, seen = next(iter(providers.values())), None, {}
-    for query, call in (("my_prs", first.my_pull_requests), ("review_requests", first.review_requests)):
-        res = call(SEARCH_LIMIT)
-        if not res.ok:
-            return res.error
+    searchers = {}
+    for s, prov in providers.items():
+        searchers.setdefault(_scope(plats[s]), prov)  # first repo of a scope does the search
+    err, seen = None, {}
+    for query, name in (("my_prs", "my_pull_requests"), ("review_requests", "review_requests")):
+        found, first_err, any_ok = [], None, False
+        for prov in searchers.values():
+            res = getattr(prov, name)(SEARCH_LIMIT)
+            any_ok = any_ok or res.ok
+            if res.ok:
+                found += res.data
+            else:
+                first_err = first_err or res.error
+        if not any_ok:
+            return first_err  # every scope failed: keep the old list
+        err = err or first_err
+        if len(searchers) > 1:
+            found.sort(key=lambda p: p.created_at or "", reverse=True)
         out = []
-        for p in _only(res.data, slugs):
+        for p in _only(found, slugs):
             key = (p.repo.lower(), p.number)
             if key not in seen:
                 full = providers[key[0]].pull_request(p.number)
@@ -97,15 +117,15 @@ def refresh(urls: list[str]) -> Error | None:
                 err = err or (None if full.ok else full.error)
             out.append(seen[key])
         cache.write(KEY, query, out)
-    runs = []
-    for s, u in slugs.items():
+    runs, failed = [], False
+    for s in slugs:
         res = providers[s].pipeline_runs(RUN_DAYS, MAX_ITEMS)
         if not res.ok:
-            if res.error.kind in platform_data.FATAL:
-                return res.error
-            err = err or res.error
+            failed, err = True, err or res.error
             continue
-        runs += [replace(r, repo=platform_data.platform_of(u).slug) for r in res.data]
+        runs += [replace(r, repo=plats[s].slug) for r in res.data]
+    if failed and not runs:
+        return err  # nothing fetched (e.g. not logged in): keep the old runs
     cache.write(KEY, "pipeline_runs", sorted(runs, key=lambda r: r.started_at or "", reverse=True)[:MAX_ITEMS])
     return err
 
@@ -166,11 +186,11 @@ def sections(ov: Overview, width: int, now: float | None = None) -> list[tuple[s
 def status_text(ov: Overview, n_repos: int, now: float | None = None) -> str:
     """Line on top of the page: age of the data and/or what is wrong."""
     if n_repos == 0:
-        return "Kein GitHub-Repo registriert."
+        return "Kein GitHub-/Azure-DevOps-Repo registriert."
     lines = ["noch nicht geladen" if ov.fetched_at is None
              else f"aktualisiert vor {format_age(int(ov.fetched_at.timestamp()), now)}"]
     if ov.error:
-        lines.append("! " + HINTS.get(ov.error.kind, hint(ov.error)))
+        lines.append("! " + (AZ_HINTS if ov.error.cli == "az" else HINTS).get(ov.error.kind, hint(ov.error)))
     return "  ".join(lines)
 
 

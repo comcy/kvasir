@@ -1,0 +1,1 @@
+ERROR: HTTPSConnectionPool(host='dev.azure.com', port=443): Max retries exceeded with url: /contoso/_apis/git (Caused by NameResolutionError: Failed to resolve 'dev.azure.com' (Name or service not known))
