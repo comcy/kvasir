@@ -15,14 +15,16 @@ Terminal-Tool für **Git-Worktrees**: Überblick über mehrere Repos, schnell we
 **Linux / macOS**
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/comcy/kvasir/main/install.sh | sh
+curl -LsSf https://comcy.github.io/kvasir/install.sh | sh
 ```
 
 **Windows (PowerShell)**
 
 ```powershell
-irm https://raw.githubusercontent.com/comcy/kvasir/main/install.ps1 | iex
+irm https://comcy.github.io/kvasir/install.ps1 | iex
 ```
+
+Die Skripte liegen auch unter `https://raw.githubusercontent.com/comcy/kvasir/main/install.sh` bzw. `install.ps1` (Fallback, falls die Seite nicht erreichbar ist).
 
 Das Skript installiert `uv` (falls nicht vorhanden) und danach kvasir direkt aus GitHub. Kein Paketregister, kein Konto.
 Wird `kvasir` danach nicht gefunden: Terminal neu starten oder `uv tool update-shell` ausführen.
@@ -38,7 +40,7 @@ pipx install "git+https://github.com/comcy/kvasir"
 ### Aktualisieren
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/comcy/kvasir/main/install.sh | sh   # erneut ausführen
+curl -LsSf https://comcy.github.io/kvasir/install.sh | sh   # erneut ausführen
 # oder
 uv tool upgrade kvasir
 ```
