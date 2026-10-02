@@ -67,9 +67,9 @@ Aus Issue #24, geplant per Grilling (2026-10-02). Rein lesend, ausschließlich �
 
 | # | Thema | Blockiert durch |
 |---|---|---|
-| 27 | Plattform-Fundament: `gh`-Zugriff, Datenmodell, Cache | – |
-| 28 | Detail-Panel, Branch-Marker, Aktualisierung | 27 |
-| 29 | Gesamtansicht (`i`) | 27, 28 |
+| 27 | Plattform-Fundament: `gh`-Zugriff, Datenmodell, Cache (erledigt) | – |
+| 28 | Detail-Panel, Branch-Marker, Aktualisierung (erledigt) | 27 |
+| 29 | Gesamtansicht (`i`) (erledigt) | 27, 28 |
 | 25 | `setup`: CLIs prüfen / Installation anbieten, Konventionen nachträglich ändern (Entwurf) | – |
 | 26 | Azure DevOps (Entwurf) | 27 |
 
@@ -79,6 +79,9 @@ Pro Abschnitt ein Test gegen ein Wegwerf-Repo (`tempfile`, echtes `git`). Window
 
 ## Offen
 
+- **Board-Status live prüfen:** `projectItems` mit echtem Projekt-Board ist nur über Fixtures getestet (Token braucht `read:project`).
+- **Plattform-Nachbesserungen:** `webbrowser.open` läuft im UI-Thread; `gh api user` pro Repo bei jedem Refresh (cachen).
+- **#25** (`setup`: CLIs prüfen, Konventionen änderbar) und **#26** (Azure DevOps): Entwürfe, vor Umsetzung planen.
 - **Windows testen** (`wt.exe`, Pfade, `install.ps1`) und die Install-Skripte einmal real ausführen — nur Linux wurde bisher geprüft.
 - **Tagesauswertung → Vault-Journal** („woran gearbeitet“): noch kein Issue, `vault_path` noch nicht konfigurierbar. Vorher grillen.
 - **Kleinigkeiten:** Abschlussnotiz wird vor `git worktree remove` gespeichert (bleibt stehen, wenn Git ablehnt); SSH-Passphrase-Abfrage kann Fetch bis zum Timeout blockieren; `setup`-URL-Erkennung bei Tippfehler im Pfad; `{date}` prüft nur das Format.
