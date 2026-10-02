@@ -217,3 +217,7 @@ def test_app_no_cache_no_gh_shows_hint_not_none(make_repo):
             assert "noch nicht geladen" in detail and "kein PR" not in detail
 
     asyncio.run(go())
+
+
+def test_platform_of_azure_not_supported_yet():
+    assert pd.platform_of("dev.azure.com/org/proj/_git/repo") is None

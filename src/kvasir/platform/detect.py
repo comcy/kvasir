@@ -9,13 +9,16 @@ from kvasir.repo_url import normalize
 
 
 def detect_platform(remote_url: str) -> PlatformRepo | None:
-    """`git@github.com:o/r.git` / `https://github.com/o/r` -> GitHub `o/r`; other hosts -> None.
-    Azure DevOps detection joins here with #26."""
+    """`git@github.com:o/r.git` / `https://github.com/o/r` -> GitHub `o/r`; any Azure DevOps form (or the bare
+    key `dev.azure.com/org/project/_git/repo` behind a `https://`) -> Azure; other hosts -> None."""
     try:
         host, _, path = normalize(remote_url).partition("/")
     except ValueError:
         return None
     parts = path.split("/")
+    if host == "dev.azure.com" and len(parts) == 4 and parts[2] == "_git" and all(parts):
+        org, project, repo = parts[0], parts[1], parts[3]
+        return PlatformRepo("azure", f"{org}/{project}/{repo}", org, project, repo)
     if host == "github.com" and len(parts) == 2 and all(parts):
         return PlatformRepo("github", path)
     return None
