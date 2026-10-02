@@ -56,7 +56,7 @@ class SettingsScreen(ModalScreen["RepoConfig | None"]):
             yield Label("Fetch interval (minutes)")
             yield Input(str(self.cfg.fetch_interval), id="fetch")
             yield Label("", id="fetch-msg", classes="err")
-            yield Label("GitHub interval (minutes)")
+            yield Label("Platform interval (minutes)")
             yield Input(str(self.cfg.platform_interval), id="platform")
             yield Label("", id="platform-msg", classes="err")
             yield Label("", id="error", classes="err")

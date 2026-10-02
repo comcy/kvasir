@@ -1,4 +1,4 @@
-"""Overview page (key `i`): my PRs, review requests, my pipeline runs over all registered GitHub Repos.
+"""Overview page (key `i`): my PRs, review requests, my pipeline runs over all registered GitHub and Azure DevOps Repos.
 
 Dismisses with (repo row, entry index) when `c` jumps to a local Branch, else None. Read-only.
 """
@@ -40,7 +40,7 @@ class OverviewScreen(Screen["tuple[int, int] | None"]):
         super().__init__()
         self.rows = rows
         self.urls = [r.url for r in rows]
-        self.repos = od.github_repos(self.urls)
+        self.repos = od.platform_repos(self.urls)
         self.entries: list[od.Entry] = []
         self.error: Error | None = None
         self.busy = False

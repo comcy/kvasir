@@ -1,0 +1,172 @@
+[
+  {
+    "id": 900,
+    "buildNumber": "20261001.900",
+    "status": "completed",
+    "result": "succeeded",
+    "queueTime": "2999-01-01T10:00:00.1234567Z",
+    "startTime": "2999-01-01T10:00:00.1234567Z",
+    "finishTime": "2999-01-01T10:01:34.1234567Z",
+    "sourceBranch": "refs/heads/feature/101-rabatte",
+    "reason": "individualCI",
+    "definition": {
+      "id": 5,
+      "name": "CI"
+    },
+    "project": {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "Shop"
+    },
+    "repository": {
+      "id": "x",
+      "name": "webapp",
+      "type": "TfsGit"
+    },
+    "requestedFor": {
+      "displayName": "Anna Beispiel",
+      "uniqueName": "anna@example.com",
+      "id": "00000000-0000-0000-0000-000000000003"
+    },
+    "_links": {
+      "web": {
+        "href": "https://dev.azure.com/contoso/x/_build/results?buildId=900"
+      }
+    }
+  },
+  {
+    "id": 899,
+    "buildNumber": "20261001.899",
+    "status": "inProgress",
+    "result": null,
+    "queueTime": "2999-01-01T09:00:00Z",
+    "startTime": "2999-01-01T09:00:00Z",
+    "finishTime": null,
+    "sourceBranch": "refs/heads/main",
+    "reason": "individualCI",
+    "definition": {
+      "id": 5,
+      "name": "CI"
+    },
+    "project": {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "Shop"
+    },
+    "repository": {
+      "id": "x",
+      "name": "webapp",
+      "type": "TfsGit"
+    },
+    "requestedFor": {
+      "displayName": "Anna Beispiel",
+      "uniqueName": "anna@example.com",
+      "id": "00000000-0000-0000-0000-000000000003"
+    },
+    "_links": {
+      "web": {
+        "href": "https://dev.azure.com/contoso/x/_build/results?buildId=899"
+      }
+    }
+  },
+  {
+    "id": 898,
+    "buildNumber": "20261001.898",
+    "status": "completed",
+    "result": "failed",
+    "queueTime": "2999-01-01T08:00:00Z",
+    "startTime": "2999-01-01T08:00:00Z",
+    "finishTime": "2999-01-01T08:02:00Z",
+    "sourceBranch": "refs/heads/main",
+    "reason": "individualCI",
+    "definition": {
+      "id": 5,
+      "name": "CI"
+    },
+    "project": {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "Shop"
+    },
+    "repository": {
+      "id": "x",
+      "name": "webapp",
+      "type": "TfsGit"
+    },
+    "requestedFor": {
+      "displayName": "Anna Beispiel",
+      "uniqueName": "anna@example.com",
+      "id": "00000000-0000-0000-0000-000000000003"
+    },
+    "_links": {
+      "web": {
+        "href": "https://dev.azure.com/contoso/x/_build/results?buildId=898"
+      }
+    }
+  },
+  {
+    "id": 897,
+    "buildNumber": "20261001.897",
+    "status": "completed",
+    "result": "succeeded",
+    "queueTime": "2999-01-01T07:00:00Z",
+    "startTime": "2999-01-01T07:00:00Z",
+    "finishTime": "2999-01-01T07:02:00Z",
+    "sourceBranch": "refs/heads/main",
+    "reason": "individualCI",
+    "definition": {
+      "id": 5,
+      "name": "Other"
+    },
+    "project": {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "Shop"
+    },
+    "repository": {
+      "id": "x",
+      "name": "anderes-repo",
+      "type": "TfsGit"
+    },
+    "requestedFor": {
+      "displayName": "Anna Beispiel",
+      "uniqueName": "anna@example.com",
+      "id": "00000000-0000-0000-0000-000000000003"
+    },
+    "_links": {
+      "web": {
+        "href": "https://dev.azure.com/contoso/x/_build/results?buildId=897"
+      }
+    }
+  },
+  {
+    "id": 1,
+    "buildNumber": "20261001.1",
+    "status": "completed",
+    "result": "succeeded",
+    "queueTime": "2020-01-01T08:00:00Z",
+    "startTime": "2020-01-01T08:00:00Z",
+    "finishTime": "2020-01-01T08:02:00Z",
+    "sourceBranch": "refs/heads/main",
+    "reason": "individualCI",
+    "definition": {
+      "id": 5,
+      "name": "CI"
+    },
+    "project": {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "Shop"
+    },
+    "repository": {
+      "id": "x",
+      "name": "webapp",
+      "type": "TfsGit"
+    },
+    "requestedFor": {
+      "displayName": "Anna Beispiel",
+      "uniqueName": "anna@example.com",
+      "id": "00000000-0000-0000-0000-000000000003"
+    },
+    "_links": {
+      "web": {
+        "href": "https://dev.azure.com/contoso/x/_build/results?buildId=1"
+      }
+    }
+  }
+]

@@ -10,6 +10,15 @@ from kvasir.tui.platform_data import BranchInfo, Snapshot, branch_of
 from kvasir.worktrees import Branch, Worktree
 
 CHECKS = {"success": "✓", "failure": "✗", "pending": "…"}
+AZ_HINTS = {
+    ErrorKind.MISSING_CLI: "az nicht gefunden",
+    ErrorKind.NOT_LOGGED_IN: "az nicht angemeldet",
+    ErrorKind.MISSING_EXTENSION: "Erweiterung azure-devops fehlt",
+    ErrorKind.MISSING_SCOPE: "Berechtigung fehlt",
+    ErrorKind.NETWORK: "Netz nicht erreichbar",
+    ErrorKind.RATE_LIMIT: "Azure-DevOps-Rate-Limit erreicht",
+    ErrorKind.OTHER: "az-Fehler",
+}
 HINTS = {
     ErrorKind.MISSING_CLI: "gh nicht gefunden",
     ErrorKind.NOT_LOGGED_IN: "gh nicht angemeldet",
@@ -17,11 +26,12 @@ HINTS = {
     ErrorKind.NETWORK: "Netz nicht erreichbar",
     ErrorKind.RATE_LIMIT: "GitHub-Rate-Limit erreicht",
     ErrorKind.OTHER: "gh-Fehler",
+    ErrorKind.MISSING_EXTENSION: "gh-Erweiterung fehlt",  # not produced by gh
 }
 
 
 def hint(error: Error) -> str:
-    return HINTS[error.kind]
+    return (AZ_HINTS if error.cli == "az" else HINTS)[error.kind]
 
 
 def marker(pr: PullRequest | None) -> str:
@@ -44,9 +54,9 @@ def markers(snap: Snapshot, entries: list[Worktree | Branch]) -> dict[str, str]:
 def repo_line(snap: Snapshot, now: float | None = None) -> str:
     """Status for the Repo column: age of the data and/or the reason it is stale."""
     if snap.fetched_at is None:
-        parts = ["gh: noch nicht geladen"]
+        parts = [f"{snap.cli}: noch nicht geladen"]
     else:
-        parts = [f"gh: aktualisiert vor {format_age(int(snap.fetched_at.timestamp()), now)}"]
+        parts = [f"{snap.cli}: aktualisiert vor {format_age(int(snap.fetched_at.timestamp()), now)}"]
     if snap.error:
         parts.append(hint(snap.error))
     return "\n".join(parts)

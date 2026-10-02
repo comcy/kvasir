@@ -1,0 +1,212 @@
+[
+  {
+    "pullRequestId": 42,
+    "codeReviewId": 42,
+    "status": "active",
+    "isDraft": false,
+    "title": "Warenkorb: Rabatte",
+    "createdBy": {
+      "displayName": "Anna Beispiel",
+      "uniqueName": "anna@example.com",
+      "id": "00000000-0000-0000-0000-000000000003"
+    },
+    "creationDate": "2026-10-01T09:15:03.1234567Z",
+    "sourceRefName": "refs/heads/feature/101-rabatte",
+    "targetRefName": "refs/heads/main",
+    "mergeStatus": "succeeded",
+    "repository": {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "webapp",
+      "project": {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "name": "Shop",
+        "state": "wellFormed"
+      }
+    },
+    "reviewers": [
+      {
+        "displayName": "Ben Muster",
+        "uniqueName": "ben@example.com",
+        "vote": 10,
+        "isRequired": true,
+        "hasDeclined": false,
+        "isFlagged": false
+      },
+      {
+        "displayName": "[Shop]\\Shop Team",
+        "uniqueName": "vstfs:///Classification/TeamProject/x",
+        "vote": 0,
+        "isContainer": true
+      }
+    ],
+    "url": "https://dev.azure.com/contoso/00000000-0000-0000-0000-000000000002/_apis/git/repositories/00000000-0000-0000-0000-000000000001/pullRequests/42"
+  },
+  {
+    "pullRequestId": 41,
+    "codeReviewId": 41,
+    "status": "active",
+    "isDraft": true,
+    "title": "Entwurf: Suche",
+    "createdBy": {
+      "displayName": "Anna Beispiel",
+      "uniqueName": "anna@example.com",
+      "id": "00000000-0000-0000-0000-000000000003"
+    },
+    "creationDate": "2026-09-30T08:00:00.0000000Z",
+    "sourceRefName": "refs/heads/feature/102-suche",
+    "targetRefName": "refs/heads/main",
+    "mergeStatus": "succeeded",
+    "repository": {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "webapp",
+      "project": {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "name": "Shop",
+        "state": "wellFormed"
+      }
+    },
+    "reviewers": [
+      {
+        "displayName": "Ben Muster",
+        "uniqueName": "ben@example.com",
+        "vote": 0,
+        "isRequired": true,
+        "hasDeclined": false,
+        "isFlagged": false
+      },
+      {
+        "displayName": "[Shop]\\Shop Team",
+        "uniqueName": "vstfs:///Classification/TeamProject/x",
+        "vote": 0,
+        "isContainer": true
+      }
+    ],
+    "url": "https://dev.azure.com/contoso/00000000-0000-0000-0000-000000000002/_apis/git/repositories/00000000-0000-0000-0000-000000000001/pullRequests/41"
+  },
+  {
+    "pullRequestId": 40,
+    "codeReviewId": 40,
+    "status": "completed",
+    "isDraft": false,
+    "title": "Fix Login",
+    "createdBy": {
+      "displayName": "Anna Beispiel",
+      "uniqueName": "anna@example.com",
+      "id": "00000000-0000-0000-0000-000000000003"
+    },
+    "creationDate": "2026-09-28T07:30:00.0000000Z",
+    "sourceRefName": "refs/heads/bugfix/103-login",
+    "targetRefName": "refs/heads/main",
+    "mergeStatus": "succeeded",
+    "repository": {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "webapp",
+      "project": {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "name": "Shop",
+        "state": "wellFormed"
+      }
+    },
+    "reviewers": [
+      {
+        "displayName": "Ben Muster",
+        "uniqueName": "ben@example.com",
+        "vote": 10,
+        "isRequired": true,
+        "hasDeclined": false,
+        "isFlagged": false
+      },
+      {
+        "displayName": "[Shop]\\Shop Team",
+        "uniqueName": "vstfs:///Classification/TeamProject/x",
+        "vote": 0,
+        "isContainer": true
+      }
+    ],
+    "url": "https://dev.azure.com/contoso/00000000-0000-0000-0000-000000000002/_apis/git/repositories/00000000-0000-0000-0000-000000000001/pullRequests/40"
+  },
+  {
+    "pullRequestId": 39,
+    "codeReviewId": 39,
+    "status": "abandoned",
+    "isDraft": false,
+    "title": "Alt",
+    "createdBy": {
+      "displayName": "Anna Beispiel",
+      "uniqueName": "anna@example.com",
+      "id": "00000000-0000-0000-0000-000000000003"
+    },
+    "creationDate": "2026-09-20T07:30:00.0000000Z",
+    "sourceRefName": "refs/heads/feature/104-alt",
+    "targetRefName": "refs/heads/main",
+    "mergeStatus": "succeeded",
+    "repository": {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "webapp",
+      "project": {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "name": "Shop",
+        "state": "wellFormed"
+      }
+    },
+    "reviewers": [
+      {
+        "displayName": "Ben Muster",
+        "uniqueName": "ben@example.com",
+        "vote": -10,
+        "isRequired": true,
+        "hasDeclined": false,
+        "isFlagged": false
+      },
+      {
+        "displayName": "[Shop]\\Shop Team",
+        "uniqueName": "vstfs:///Classification/TeamProject/x",
+        "vote": 0,
+        "isContainer": true
+      }
+    ],
+    "url": "https://dev.azure.com/contoso/00000000-0000-0000-0000-000000000002/_apis/git/repositories/00000000-0000-0000-0000-000000000001/pullRequests/39"
+  },
+  {
+    "pullRequestId": 38,
+    "codeReviewId": 38,
+    "status": "active",
+    "isDraft": false,
+    "title": "Warten",
+    "createdBy": {
+      "displayName": "Anna Beispiel",
+      "uniqueName": "anna@example.com",
+      "id": "00000000-0000-0000-0000-000000000003"
+    },
+    "creationDate": "2026-09-19T07:30:00.0000000Z",
+    "sourceRefName": "refs/heads/feature/105-warten",
+    "targetRefName": "refs/heads/main",
+    "mergeStatus": "succeeded",
+    "repository": {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "webapp",
+      "project": {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "name": "Shop",
+        "state": "wellFormed"
+      }
+    },
+    "reviewers": [
+      {
+        "displayName": "Ben Muster",
+        "uniqueName": "ben@example.com",
+        "vote": -5,
+        "isRequired": true,
+        "hasDeclined": false,
+        "isFlagged": false
+      },
+      {
+        "displayName": "[Shop]\\Shop Team",
+        "uniqueName": "vstfs:///Classification/TeamProject/x",
+        "vote": 0,
+        "isContainer": true
+      }
+    ],
+    "url": "https://dev.azure.com/contoso/00000000-0000-0000-0000-000000000002/_apis/git/repositories/00000000-0000-0000-0000-000000000001/pullRequests/38"
+  }
+]

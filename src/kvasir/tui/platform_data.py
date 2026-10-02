@@ -27,8 +27,8 @@ from kvasir.worktrees import Branch, RepoView, Worktree
 PR_LIMIT = 50
 RUN_LIMIT = 50
 RUN_DAYS = 7
-MAX_ITEMS = 20  # ponytail: one `gh issue view` per id, capped; raise if repos with many branches need more
-FATAL = (ErrorKind.MISSING_CLI, ErrorKind.NOT_LOGGED_IN, ErrorKind.NETWORK, ErrorKind.RATE_LIMIT)
+MAX_ITEMS = 20  # ponytail: one work item call per id, capped; raise if repos with many branches need more
+FATAL = (ErrorKind.MISSING_CLI, ErrorKind.MISSING_EXTENSION, ErrorKind.NOT_LOGGED_IN, ErrorKind.NETWORK, ErrorKind.RATE_LIMIT)
 
 
 @dataclass(frozen=True)
@@ -48,6 +48,7 @@ class Snapshot:
     patterns: list[str]
     fetched_at: datetime | None  # of the PR list; None = never fetched
     error: Error | None = None  # last refresh error; the data above is the old state
+    cli: str = "gh"  # CLI of the repo's platform, for texts: "gh" | "az"
 
     def info(self, branch: str) -> BranchInfo:
         mine = [p for p in self.prs if p.branch == branch]  # newest first
@@ -59,8 +60,7 @@ class Snapshot:
 
 def platform_of(url: str) -> PlatformRepo | None:
     """Platform of a registered Repo (identity `github.com/o/r`, no scheme); None = not supported."""
-    plat = detect_platform("https://" + url)
-    return plat if plat and plat.kind == "github" else None  # azure has no provider until #43
+    return detect_platform("https://" + url)
 
 
 def branch_of(entry: Worktree | Branch) -> str | None:
@@ -96,8 +96,9 @@ def snapshot(url: str, patterns: list[str], branches: list[str], error: Error | 
     for n in _numbers(branches, patterns, prs):
         if found := _cached(url, f"work_item:{n}", WorkItem):
             items[n] = found[0]
+    plat = platform_of(url)
     return Snapshot(prs, _cached(url, "pipeline_runs", PipelineRun), items, patterns,
-                    e.fetched_at if e else None, error)
+                    e.fetched_at if e else None, error, "az" if plat and plat.kind == "azure" else "gh")
 
 
 def refresh(url: str, patterns: list[str], branches: list[str], provider: Provider | None = None) -> Error | None:

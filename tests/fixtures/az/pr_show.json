@@ -1,0 +1,42 @@
+{
+  "pullRequestId": 42,
+  "codeReviewId": 42,
+  "status": "active",
+  "isDraft": false,
+  "title": "Warenkorb: Rabatte",
+  "createdBy": {
+    "displayName": "Anna Beispiel",
+    "uniqueName": "anna@example.com",
+    "id": "00000000-0000-0000-0000-000000000003"
+  },
+  "creationDate": "2026-10-01T09:15:03.1234567Z",
+  "sourceRefName": "refs/heads/feature/101-rabatte",
+  "targetRefName": "refs/heads/main",
+  "mergeStatus": "succeeded",
+  "repository": {
+    "id": "00000000-0000-0000-0000-000000000001",
+    "name": "webapp",
+    "project": {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "Shop",
+      "state": "wellFormed"
+    }
+  },
+  "reviewers": [
+    {
+      "displayName": "Ben Muster",
+      "uniqueName": "ben@example.com",
+      "vote": 10,
+      "isRequired": true,
+      "hasDeclined": false,
+      "isFlagged": false
+    },
+    {
+      "displayName": "[Shop]\\Shop Team",
+      "uniqueName": "vstfs:///Classification/TeamProject/x",
+      "vote": 0,
+      "isContainer": true
+    }
+  ],
+  "url": "https://dev.azure.com/contoso/00000000-0000-0000-0000-000000000002/_apis/git/repositories/00000000-0000-0000-0000-000000000001/pullRequests/42"
+}

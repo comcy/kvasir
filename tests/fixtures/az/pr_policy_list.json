@@ -1,0 +1,43 @@
+[
+  {
+    "evaluationId": "00000000-0000-0000-0000-0000000000a1",
+    "status": "approved",
+    "configuration": {
+      "isBlocking": true,
+      "isEnabled": true,
+      "type": {
+        "displayName": "Build"
+      }
+    }
+  },
+  {
+    "evaluationId": "00000000-0000-0000-0000-0000000000a2",
+    "status": "running",
+    "configuration": {
+      "isBlocking": true,
+      "isEnabled": true,
+      "type": {
+        "displayName": "Minimum number of reviewers"
+      }
+    }
+  },
+  {
+    "evaluationId": "00000000-0000-0000-0000-0000000000a3",
+    "status": "rejected",
+    "configuration": {
+      "isBlocking": false,
+      "isEnabled": true,
+      "type": {
+        "displayName": "Comment requirements"
+      }
+    }
+  },
+  {
+    "evaluationId": "00000000-0000-0000-0000-0000000000a4",
+    "status": "notApplicable",
+    "configuration": {
+      "isBlocking": true,
+      "isEnabled": true
+    }
+  }
+]
