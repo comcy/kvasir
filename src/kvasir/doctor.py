@@ -5,6 +5,7 @@ Linux: command is shown, never run. Login and scopes are shown, never run. No su
 """
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -45,11 +46,10 @@ CLIS = {
          "debian": LINUX_DOCS, "ubuntu": LINUX_DOCS},
         "gh auth login", "gh auth refresh -s read:project", "read:project",
     ),
-    # prepared, inactive until #26 (Azure DevOps detection)
     "azure": Cli(
         "az", "azure", "https://learn.microsoft.com/cli/azure/install-azure-cli",
         {"win32": ["winget", "install", "--id", "Microsoft.AzureCLI"], "darwin": ["brew", "install", "azure-cli"]},
-        {}, "az login", active=False,
+        {}, "az login",  # linux: no per-distro table, the Microsoft page covers every distribution
     ),
 }
 
@@ -129,6 +129,37 @@ def parse_scopes(text: str) -> set[str] | None:
     return set(re.findall(r"[\w:.-]+", m[1])) if m else None
 
 
+AZ_EXTENSION = "azure-devops"
+
+
+def _check_az() -> list[Check]:
+    """Login and the `azure-devops` extension. Assumed from the Microsoft docs, NOT verified live (no az here):
+    `az account show` exits 0 with JSON when logged in, non-zero ("Please run 'az login'") when not;
+    `az extension list` prints a JSON array of objects with a "name" key. Anything else -> warn, never raise."""
+    out = []
+    res = _run(["az", "account", "show", "-o", "json"])
+    if res is None:
+        out.append(Check("warn", "az account show not runnable"))
+    elif res[0]:
+        out.append(Check("fail", "az not logged in", CLIS["azure"].login))
+    else:
+        out.append(Check("ok", "az logged in"))
+    res = _run(["az", "extension", "list", "-o", "json"])
+    names: set[str] | None = None
+    if res is not None and res[0] == 0:
+        try:
+            names = {e["name"] for e in json.loads(res[1]) if isinstance(e, dict) and isinstance(e.get("name"), str)}
+        except (ValueError, TypeError):
+            pass
+    if names is None:
+        out.append(Check("warn", f"az extensions not readable (needed: {AZ_EXTENSION})"))
+    elif AZ_EXTENSION in names:
+        out.append(Check("ok", f"az extension {AZ_EXTENSION} installed"))
+    else:  # only shown, never run
+        out.append(Check("fail", f"az extension {AZ_EXTENSION} missing", f"az extension add --name {AZ_EXTENSION}"))
+    return out
+
+
 def check_cli(cli: Cli, system: str | None = None, os_release: str | None = None) -> list[Check]:
     """Installed, logged in, scope. Each Check carries its fix command."""
     system = system or sys.platform
@@ -141,8 +172,8 @@ def check_cli(cli: Cli, system: str | None = None, os_release: str | None = None
         v = _version(res[1]) if res else None
         if v is not None and v < cli.min_version:
             out.append(Check("fail", f"{cli.name} too old", f"update {cli.name} to >= {_dotted(cli.min_version)}"))
-    if cli.name != "gh":  # ponytail: only gh's login state is parsed; az joins with #26
-        return out
+    if cli.name == "az":
+        return out + _check_az()
     res = _run(["gh", "auth", "status"])
     if res is None:
         out.append(Check("warn", "gh auth status not runnable"))
@@ -176,8 +207,6 @@ def check_config() -> tuple[list[Check], dict, object]:
 
 def check_platform(url: str, system: str | None = None) -> list[Check]:
     """Platform of a registered repo (normalized URL) and whether its CLI is usable."""
-    if "dev.azure.com" in url or "visualstudio.com" in url:
-        return [Check("warn", f"{url}: Azure DevOps not supported yet (#26)")]
     repo = detect_platform(url if "://" in url else f"https://{url}")
     if repo is None:
         return [Check("ok", f"{url}: no platform recognized (git only)")]
@@ -194,6 +223,8 @@ def all_checks(system: str | None = None) -> list[Check]:
     out = [check_git(), *check_cli(CLIS["github"], system)]
     cfg, repos, local = check_config()
     out += cfg
+    if any((r := detect_platform(f"https://{u}")) and r.kind == "azure" for u in repos):
+        out += check_cli(CLIS["azure"], system)  # az only matters when an Azure repo is registered
     for url in repos:
         path = local.paths.get(url) if local else None
         if path and not Path(path).exists():

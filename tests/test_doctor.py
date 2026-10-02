@@ -10,6 +10,9 @@ from kvasir.cli import app
 from kvasir.config import LocalConfig, RepoConfig, save_local, save_repos
 
 GH = doctor.CLIS["github"]
+AZ = doctor.CLIS["azure"]
+AZ_EXT = '[{"name": "azure-devops", "version": "1.0.1"}]'
+AZ_KEY = "dev.azure.com/org/proj/_git/repo"
 AUTH_OK = "github.com\n  ✓ Logged in\n  - Token scopes: 'gist', 'read:org', 'repo'\n"
 
 
@@ -109,14 +112,48 @@ def test_windows_mac_hint_needs_package_manager(monkeypatch):
     assert "brew not found" in doctor.install_hint(GH, "darwin")
 
 
-def test_azure_prepared_but_inactive():
-    assert not doctor.CLIS["azure"].active
-
-
-def test_platform_azure_not_supported_and_other_host():
-    c = doctor.check_platform("dev.azure.com/org/proj/repo")[0]
-    assert c.status == "warn" and "not supported yet (#26)" in c.text
+def test_platform_other_host_and_azure_states(monkeypatch):
     assert doctor.check_platform("gitlab.com/o/r")[0].status == "ok"
+    Env(monkeypatch, have=("az",))
+    assert doctor.check_platform(AZ_KEY)[0].text == f"{AZ_KEY}: azure, az available"
+    Env(monkeypatch, have=())
+    c = doctor.check_platform(AZ_KEY, "linux")[0]
+    assert c.status == "fail" and "az missing" in c.text and c.missing is AZ
+    assert c.fix == f"see {AZ.docs}"
+
+
+def az_env(monkeypatch, show=(0, "{}"), ext=(0, AZ_EXT)):
+    return Env(monkeypatch, have=("az",), runs={"az account show": show, "az extension list": ext})
+
+
+def test_az_checks(monkeypatch):
+    Env(monkeypatch, have=())
+    c = doctor.check_cli(AZ, "darwin")[0]
+    assert c.status == "fail" and c.missing is AZ and c.text == "az not installed"
+
+    az_env(monkeypatch)
+    assert [c.status for c in doctor.check_cli(AZ, "linux", "")] == ["ok", "ok", "ok"]
+
+    az_env(monkeypatch, show=(1, "ERROR: Please run 'az login' to setup account."))
+    assert by_text(doctor.check_cli(AZ, "linux", ""), "not logged in").fix == "az login"
+
+    az_env(monkeypatch, ext=(0, '[{"name": "other"}]'))
+    c = by_text(doctor.check_cli(AZ, "linux", ""), "azure-devops missing")
+    assert c.status == "fail" and c.fix == "az extension add --name azure-devops"
+
+
+@pytest.mark.parametrize("bad,status", [
+    ((0, "not json"), "warn"), ((0, '{"name": "azure-devops"}'), "fail"), ((0, "[1, null]"), "fail"), ((1, "boom"), "warn")])
+def test_az_extension_output_parsed_defensively(monkeypatch, bad, status):
+    az_env(monkeypatch, ext=bad)
+    c = next(c for c in doctor.check_cli(AZ, "linux", "") if "extension" in c.text)
+    assert c.status == status  # never "ok", never raises
+
+
+def test_az_never_runs_login_or_extension_add(monkeypatch):
+    e = az_env(monkeypatch, show=(1, ""), ext=(0, "[]"))
+    doctor.check_cli(AZ, "linux", "")
+    assert e.calls == [["az", "account", "show", "-o", "json"], ["az", "extension", "list", "-o", "json"]]
 
 
 # --- install offer
@@ -129,6 +166,34 @@ def test_install_only_after_yes(monkeypatch, system, argv):
     assert e.calls == []
     assert doctor.offer_install(GH, system, lambda q: argv[0] in q, lambda m: None) is True
     assert e.calls == [argv]
+
+
+@pytest.mark.parametrize("system,argv", [
+    ("win32", ["winget", "install", "--id", "Microsoft.AzureCLI"]), ("darwin", ["brew", "install", "azure-cli"])])
+def test_az_install_only_after_yes(monkeypatch, system, argv):
+    e = Env(monkeypatch, have=("winget", "brew"))
+    assert doctor.offer_install(AZ, system, lambda q: False, print) is False
+    assert e.calls == []
+    assert doctor.offer_install(AZ, system, lambda q: True, lambda m: None) is True
+    assert e.calls == [argv]
+
+
+def test_az_linux_shows_only(monkeypatch):
+    e = Env(monkeypatch, have=("sudo", "apt", "dnf", "brew"))
+    assert doctor.offer_install(AZ, "linux", lambda q: pytest.fail(q), print) is False
+    assert e.calls == [] and doctor.install_hint(AZ, "linux", "ID=ubuntu") == f"see {AZ.docs}"
+
+
+def test_report_asks_once_per_cli_for_both(monkeypatch):
+    e = Env(monkeypatch, have=("brew",))
+    asked = []
+
+    def checks():
+        return (doctor.check_cli(GH, "darwin") + doctor.check_cli(AZ, "darwin")
+                + doctor.check_platform(AZ_KEY, "darwin") + doctor.check_platform("github.com/o/r", "darwin"))
+
+    doctor.report(checks, True, lambda q: asked.append(q) or False, lambda m: None, "darwin")
+    assert len(asked) == 2 and "gh" in asked[0] and "az" in asked[1] and e.calls == []
 
 
 def test_linux_never_installs(monkeypatch):
@@ -183,12 +248,28 @@ def test_doctor_broken_config_and_missing_path(env, cfg_dir):
 
 
 def test_doctor_repos(env, tmp_path):
-    save_repos({"github.com/o/r": RepoConfig(), "dev.azure.com/org/p/r": RepoConfig()})
+    save_repos({"github.com/o/r": RepoConfig(), AZ_KEY: RepoConfig()})
     save_local(LocalConfig(paths={"github.com/o/r": str(tmp_path / "gone")}))
     r = CliRunner().invoke(app, ["doctor"])
-    assert r.exit_code == 0
     assert "local path missing" in r.stdout and "github.com/o/r: github, gh available" in r.stdout
-    assert "Azure DevOps not supported yet (#26)" in r.stdout
+    assert "✗ az not installed" in r.stdout and f"{AZ_KEY}: azure, az missing" in r.stdout and r.exit_code == 1
+
+
+def test_doctor_azure_repo_with_az(monkeypatch):
+    Env(monkeypatch, have=("git", "gh", "az"), runs={
+        "git --version": (0, "git version 2.43.0"), "gh auth status": (0, AUTH_OK),
+        "az account show": (0, "{}"), "az extension list": (0, AZ_EXT)})
+    save_repos({AZ_KEY: RepoConfig()})
+    r = CliRunner().invoke(app, ["doctor"])
+    assert r.exit_code == 0, r.stdout
+    assert "✓ az logged in" in r.stdout and "✓ az extension azure-devops installed" in r.stdout
+    assert f"{AZ_KEY}: azure, az available" in r.stdout
+
+
+def test_doctor_github_only_ignores_az(env):
+    save_repos({"github.com/o/r": RepoConfig()})
+    r = CliRunner().invoke(app, ["doctor"])
+    assert "az " not in r.stdout and "azure" not in r.stdout
 
 
 # --- setup integration
@@ -223,7 +304,12 @@ def test_setup_missing_gh_declined_still_registered(make_repo, tty, monkeypatch)
     assert ["brew", "install", "gh"] not in e.calls
 
 
-def test_setup_azure_remote_not_supported(make_repo, tty, env):
+def test_setup_azure_repo_checks_az(make_repo, tty, monkeypatch):
+    Env(monkeypatch, have=("az",), runs={
+        "az account show": (1, "ERROR: Please run 'az login'"), "az extension list": (0, "[]")})
     r = CliRunner().invoke(app, ["setup", str(make_repo(remote="https://dev.azure.com/org/p/_git/r")),
                                  "-p", "{type}/{slug}"])
-    assert r.exit_code == 0 and "not supported yet (#26)" in r.stdout
+    assert r.exit_code == 0 and "✓ az installed" in r.stdout
+    assert "✗ az not logged in" in r.stdout and "-> az login" in r.stdout
+    assert "-> az extension add --name azure-devops" in r.stdout
+    assert "dev.azure.com/org/p/_git/r: azure, az available" in r.stdout
