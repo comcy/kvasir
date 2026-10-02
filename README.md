@@ -97,6 +97,7 @@ Drei Spalten, von links nach rechts verfeinert: **Repos → Worktrees/Branches �
 | `f` | Alle Repos jetzt fetchen (`git fetch --prune`) |
 | `p` | Markierten Worktree pullen (`--ff-only`, nie Merge/Rebase) |
 | `m` | Notiz zum markierten Worktree/Branch |
+| `b` | Remote-Branches ein-/ausklappen (standardmäßig eingeklappt) |
 | `r` | Neu laden |
 | `q` | Beenden |
 

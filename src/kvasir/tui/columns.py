@@ -3,8 +3,10 @@ from __future__ import annotations
 
 from rich.text import Text
 from textual.widgets import OptionList, Static
+from textual.widgets.option_list import Option
 
 from kvasir.tui.data import RepoRow, format_age
+from kvasir.tui.layout import Group, cut, entry_name, format_entry, name_width, short_name, tilde
 from kvasir.worktrees import Branch, Worktree
 
 
@@ -17,39 +19,92 @@ def counts(w: Worktree) -> str:
 
 
 class RepoList(OptionList):
+    """Left column: per Repo `owner/name`, `~/path`, info line, blank line."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._rows: list[RepoRow] = []
+        self._sync: dict[str, tuple[float | None, str | None]] = {}
+
     def set_rows(self, rows: list[RepoRow], sync: dict[str, tuple[float | None, str | None]] | None = None) -> None:
         """`sync`: url -> (last fetch unix ts, fetch error)."""
+        self._rows, self._sync = rows, sync or {}
+        self._render_rows()
+
+    def _render_rows(self) -> None:
+        w = max(8, self.scrollable_content_region.width - 2)  # option padding
+
+        def line(s: str, style: str = "") -> Text:
+            return _line(cut(s, w), style)
+
         self.clear_options()
-        for r in rows:
+        for r in self._rows:
+            name = line(short_name(r.url), "bold")
+            path = line(tilde(r.path) if r.path else "(no path)", "dim")
             if r.view:
-                ts, err = (sync or {}).get(r.url, (None, None))
+                ts, err = self._sync.get(r.url, (None, None))
                 info = f"{len(r.view.worktrees)} wt, {r.dirty} dirty, fetched {format_age(ts)}"
-                if err:
-                    self.add_option(_line(f"{r.url}  {info}  [fetch failed: {err}]", "yellow"))
-                else:
-                    self.add_option(_line(f"{r.url}  {info}"))
+                lines = [line(info)] + ([line(f"fetch failed: {err}", "yellow")] if err else [])
             else:
-                self.add_option(_line(f"{r.url}  [{r.error}]", "red"))
+                lines = [line(f"[{r.error}]", "red")]
+            self.add_option(Text("\n").join([name, path, *lines, Text("")]))
+
+    def on_resize(self) -> None:
+        if self._rows:
+            h = self.highlighted
+            self._render_rows()
+            if h is not None:
+                with self.prevent(OptionList.OptionHighlighted):
+                    self.highlighted = h
 
 
 class EntryList(OptionList):
-    """Middle column: Worktrees, then Branches without Worktree."""
+    """Middle column: grouped Entries. Headings are disabled options; `index_map` maps option -> entry index."""
 
-    def set_entries(self, entries: list[Worktree | Branch], notes: dict[str, dict] | None = None) -> None:
-        """`notes`: branch -> newest note, shown shortened at the end of the line."""
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.index_map: list[int | None] = []  # option index -> index into the flat entry list (None = heading)
+        self._groups: list[Group] = []
+        self._notes: dict[str, dict] = {}
+
+    def set_entries(self, groups: list[Group], notes: dict[str, dict] | None = None, keep: int = 0) -> None:
+        """`notes`: branch -> newest note. `keep`: entry index to highlight."""
+        self._groups, self._notes = groups, notes or {}
+        self._render_groups(keep)
+
+    def entry_to_option(self, i: int) -> int | None:
+        return self.index_map.index(i) if i in self.index_map else None
+
+    def current_entry(self) -> int | None:
+        h = self.highlighted
+        return self.index_map[h] if h is not None and h < len(self.index_map) else None
+
+    def _render_groups(self, keep: int | None) -> None:
         self.clear_options()
-        for e in entries:
-            n = (notes or {}).get(getattr(e, "branch", None) or getattr(e, "name", ""))
-            tail = f"  ✎ {n['text'][:30]}" if n else ""
-            if isinstance(e, Worktree):
-                if e.broken:
-                    self.add_option(_line(f"! {e.branch or e.path.name}  [defekt: {e.broken}]", "red"))
-                else:
-                    self.add_option(_line(
-                        f"{e.branch or '(detached)'}  {format_age(e.commit_ts)}  {counts(e)}  {e.subject}{tail}"
-                    ))
-            else:
-                self.add_option(_line(f"{e.name}  {format_age(e.commit_ts)}  {e.subject}{tail}", "dim"))
+        self.index_map = []
+        names = [entry_name(e) for g in self._groups for e in g.visible]
+        total = max(8, self.scrollable_content_region.width - 2)  # option padding
+        nw = name_width(names, total)
+        n = 0
+        for gi, g in enumerate(self._groups):
+            head = ("\n" if gi else "") + cut(g.header, total)
+            self.add_option(Option(Text(head, style="bold"), disabled=True))
+            self.index_map.append(None)
+            for e in g.visible:
+                note = self._notes.get(getattr(e, "branch", None) or getattr(e, "name", ""))
+                style = "red" if isinstance(e, Worktree) and e.broken else "dim" if isinstance(e, Branch) else ""
+                line = format_entry(e, nw, note["text"] if note else "")
+                self.add_option(_line(cut(line, total), style))
+                self.index_map.append(n)
+                n += 1
+        opt = self.entry_to_option(keep) if keep is not None else None
+        if opt is not None:
+            with self.prevent(OptionList.OptionHighlighted):
+                self.highlighted = opt
+
+    def on_resize(self) -> None:
+        if self._groups:
+            self._render_groups(self.current_entry())
 
 
 class DetailPanel(Static):

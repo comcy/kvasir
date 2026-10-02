@@ -51,7 +51,7 @@ def test_app_m_saves_note_and_shows_it(make_repo):
             await pilot.press(*"wip", "enter")
             await pilot.pause()
             assert notes.latest(U, "main")["text"] == "wip"
-            assert "wip" in str(app.query_one(EntryList).get_option_at_index(0).prompt)
+            assert "wip" in str(app.query_one(EntryList).get_option_at_index(1).prompt)  # 0 = heading
             assert "wip" in str(app.query_one(DetailPanel).content)
 
     asyncio.run(run())
