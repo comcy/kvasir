@@ -1,6 +1,6 @@
 # kvasir – Plan
 
-Stand: 2026-10-01 (Neustart auf `main`, Ergebnis des Grillings). Der alte Stand liegt in `archive/v0-mimirlink`.
+Stand: 2026-10-02 (Neustart auf `main`; alle zehn Issues #1 bis #10 umgesetzt). Der alte Stand liegt in `archive/v0-mimirlink`.
 
 ## Ziel
 
@@ -59,5 +59,8 @@ Pro Abschnitt ein Test gegen ein Wegwerf-Repo (`tempfile`, echtes `git`). Window
 
 ## Offen
 
-- Pfad der synchronisierbaren Konfigurationsdatei (Vorschlag: eigener Ordner, den du in Dotfiles legen kannst).
-- Konfiguration pro Rechner für `setup --convert` (später).
+- **Windows testen** (`wt.exe`, Pfade, `install.ps1`) und die Install-Skripte einmal real ausführen — nur Linux wurde bisher geprüft.
+- **Tagesauswertung → Vault-Journal** („woran gearbeitet“): noch kein Issue, `vault_path` noch nicht konfigurierbar. Vorher grillen.
+- **Kleinigkeiten:** Abschlussnotiz wird vor `git worktree remove` gespeichert (bleibt stehen, wenn Git ablehnt); SSH-Passphrase-Abfrage kann Fetch bis zum Timeout blockieren; `setup`-URL-Erkennung bei Tippfehler im Pfad; `{date}` prüft nur das Format.
+- `setup --convert` (normalen Clone ins Bare-Layout umbauen), später.
+- Konfiguration liegt lokal (`~/.config/kvasir/` bzw. `%APPDATA%\kvasir`), kein Dotfiles-Repo; `repos.toml` ist bei Bedarf synchronisierbar.
