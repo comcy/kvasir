@@ -36,8 +36,11 @@ class Result(Generic[T]):
 
 @dataclass(frozen=True)
 class PlatformRepo:
-    kind: str  # "github" (later "azure")
-    slug: str  # "owner/repo"
+    kind: str  # "github" | "azure"
+    slug: str  # github: "owner/repo"; azure: "org/project/repo" (lowercase)
+    org: str = ""  # azure only (empty for github)
+    project: str = ""  # azure only
+    repo: str = ""  # azure only
 
 
 @dataclass(frozen=True)

@@ -59,7 +59,8 @@ class Snapshot:
 
 def platform_of(url: str) -> PlatformRepo | None:
     """Platform of a registered Repo (identity `github.com/o/r`, no scheme); None = not supported."""
-    return detect_platform("https://" + url)
+    plat = detect_platform("https://" + url)
+    return plat if plat and plat.kind == "github" else None  # azure has no provider until #43
 
 
 def branch_of(entry: Worktree | Branch) -> str | None:

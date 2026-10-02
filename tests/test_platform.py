@@ -58,7 +58,19 @@ def test_detect_github(url):
 
 
 @pytest.mark.parametrize("url", [
-    "git@gitlab.com:o/r.git", "https://dev.azure.com/org/proj/_git/r", "https://github.com/onlyowner", "nonsense",
+    "https://dev.azure.com/Org/My%20Proj/_git/Repo",
+    "https://org@dev.azure.com/org/my proj/_git/repo.git",
+    "git@ssh.dev.azure.com:v3/org/my%20proj/repo",
+    "https://org.visualstudio.com/DefaultCollection/my proj/_git/repo",
+    "org@vs-ssh.visualstudio.com:v3/org/my%20proj/repo",
+    "https://dev.azure.com/org/my proj/_git/repo",  # registered key behind "https://", as platform_of passes it
+])
+def test_detect_azure(url):
+    assert detect_platform(url) == PlatformRepo("azure", "org/my proj/repo", "org", "my proj", "repo")
+
+
+@pytest.mark.parametrize("url", [
+    "git@gitlab.com:o/r.git", "https://dev.azure.com/org/proj", "https://github.com/onlyowner", "nonsense",
 ])
 def test_detect_other(url):
     assert detect_platform(url) is None
