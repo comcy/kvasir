@@ -143,7 +143,7 @@ Ein neuer Branch ist gültig, wenn er mindestens eine Vorlage trifft. Ein Versto
 
 Prüft die Voraussetzungen, jederzeit und ohne ein Repo zu registrieren. Je Punkt `✓` (ok), `✗` (Fehler) oder `!` (Warnung) mit passendem Befehl zur Behebung. Exit-Code 1 bei mindestens einem `✗`, sonst 0.
 
-Geprüft werden: `git` ab 2.36, `gh` im PATH, `gh` angemeldet, Berechtigung `read:project` (nur Warnung), lesbare `repos.toml`/`local.toml`, registrierte Repos mit fehlendem lokalem Pfad, und je Repo die erkannte Plattform samt verfügbarer CLI. Azure DevOps ist noch nicht unterstützt (#26).
+Geprüft werden: `git` ab 2.36, `gh` im PATH, `gh` angemeldet, Berechtigung `read:project` (nur Warnung), lesbare `repos.toml`/`local.toml`, registrierte Repos mit fehlendem lokalem Pfad, und je Repo die erkannte Plattform samt verfügbarer CLI. Ist ein Azure-DevOps-Repo registriert (oder wird es mit `setup` registriert), prüft `doctor` zusätzlich `az` im PATH, die Anmeldung (`az account show`, sonst Hinweis `az login`) und die Erweiterung `azure-devops` (`az extension list`, sonst Hinweis `az extension add --name azure-devops`). Beides zeigt kvasir nur an und führt es nie selbst aus.
 
 `setup` führt dieselbe Prüfung für die Plattform des Repos aus (nur im Terminal, abschaltbar mit `--no-cli-check`). Ohne Terminal gibt `doctor` nur aus und fragt nie.
 
@@ -157,6 +157,8 @@ Geprüft werden: `git` ab 2.36, `gh` im PATH, `gh` angemeldet, Berechtigung `rea
 | Fedora | `sudo dnf install gh` (nur angezeigt) |
 | Debian / Ubuntu | [offizielle Anleitung](https://github.com/cli/cli/blob/trunk/docs/install_linux.md) |
 | sonst | <https://cli.github.com> |
+
+**Installation von `az`** (gleiche Regeln): Windows `winget install --id Microsoft.AzureCLI`, macOS `brew install azure-cli` (jeweils nur nach `y`); Linux nur Link zur [Microsoft-Anleitung](https://learn.microsoft.com/cli/azure/install-azure-cli) (Paketquelle je Distribution). Die Frage kommt pro CLI nur einmal, auch wenn GitHub- und Azure-Repos registriert sind.
 
 Unter Linux führt kvasir nie eine Installation aus (braucht `sudo`). Fehlt `winget`/`brew`, gibt es nur den Link. Anmeldung (`gh auth login`) und Berechtigung (`gh auth refresh -s read:project`) zeigt kvasir nur an und führt sie nie selbst aus.
 
