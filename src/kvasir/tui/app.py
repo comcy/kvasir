@@ -19,6 +19,7 @@ from kvasir.config import RepoConfig, load_local, load_repos
 from kvasir.new_worktree import is_bare_layout
 from kvasir.open_terminal import OpenTerminalError, open_terminal
 from kvasir.platform import Error
+from kvasir.repo_file import patterns_for
 from kvasir.sync import fetch, pull
 from kvasir.tui import platform_data, platform_view
 from kvasir.tui.columns import DetailPanel, EntryList, RepoList
@@ -181,7 +182,7 @@ class KvasirApp(App):
         if row is None or row.view is None or url in self._platform_busy:
             return
         self._platform_busy.add(url)
-        patterns = load_repos().get(url, RepoConfig()).branch_patterns
+        patterns = patterns_for(url)
         self._refresh_platform(url, patterns, platform_data.branch_names(row.view))
 
     @work(thread=True, group="platform")
@@ -196,10 +197,9 @@ class KvasirApp(App):
 
     def _apply_platform(self) -> None:
         """Rebuild the snapshots from the cache (no network) and redraw."""
-        cfgs = load_repos()
         for row in self.rows:
             if row.view and platform_data.platform_of(row.url):
-                patterns = cfgs.get(row.url, RepoConfig()).branch_patterns
+                patterns = patterns_for(row.url)
                 self.platform[row.url] = platform_data.snapshot(
                     row.url, patterns, platform_data.branch_names(row.view), self._platform_error.get(row.url))
         self.query_one(RepoList).set_platform(
@@ -322,7 +322,7 @@ class KvasirApp(App):
             return self.notify("Select a readable repo first", severity="error")
         if not is_bare_layout(row.path):
             return self.notify("Worktrees need the Bare-Layout (.bare/); this is a normal clone", severity="error")
-        patterns = load_repos().get(row.url, RepoConfig()).branch_patterns
+        patterns = patterns_for(row.url)
 
         def done(path: Path | None) -> None:
             if path:

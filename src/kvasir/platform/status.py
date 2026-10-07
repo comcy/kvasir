@@ -10,7 +10,7 @@ from dataclasses import replace
 from kvasir.platform.az import Azure
 from kvasir.platform.gh import GitHub
 from kvasir.platform.models import IssueStatus, Item, ItemStatus, PullRequest, Result
-from kvasir.platform.stepper import Facts, feature_stepper, ticket_stepper
+from kvasir.platform.stepper import PHASES, Facts, Phases, feature_stepper, ticket_stepper
 
 LABEL_PREFIX = "status:"
 
@@ -68,17 +68,17 @@ def _prs_of(n: int, prs: list[PullRequest]) -> list[PullRequest]:
 
 
 def _with_stepper(st: ItemStatus, feature: bool, subs: list[Item], prs: list[PullRequest],
-                  branches: list[str]) -> ItemStatus:
+                  branches: list[str], phases: Phases) -> ItemStatus:
     n = st.item.number
     own = _prs_of(n, prs)
     if feature:
         own = [p for s in subs for p in _prs_of(s.number, prs)]
     f = Facts(st.item, tuple(subs), tuple(own), any(_on_branch(n, b) for b in branches))
     prev = tuple(b.number for b in st.blocked_by if b.state == "closed")
-    return replace(st, stepper=(feature_stepper if feature else ticket_stepper)(f, prev))
+    return replace(st, stepper=feature_stepper(f, prev, phases) if feature else ticket_stepper(f, prev))
 
 
-def issue_status(gh: GitHub | Azure, number: int) -> Result[IssueStatus]:
+def issue_status(gh: GitHub | Azure, number: int, phases: Phases = PHASES) -> Result[IssueStatus]:
     """Issue + sub-issues, each with blockers and status. First failing gh call ends it with its Error."""
     root = gh.item(number)
     if not root.ok:
@@ -97,5 +97,5 @@ def issue_status(gh: GitHub | Azure, number: int) -> Result[IssueStatus]:
         live = [p for p in prs.data if p.state in ("open", "draft")]
         feature = it is root.data and bool(subs.data)
         out.append(_with_stepper(derive(it, bl.data, live, branches.data), feature, subs.data, prs.data,
-                                 branches.data))
+                                 branches.data, phases))
     return Result(data=IssueStatus(gh.slug, out[0], tuple(out[1:])))

@@ -32,6 +32,7 @@ class RepoConfig:
     branch_patterns: list[str] = field(default_factory=lambda: list(DEFAULT_PATTERNS))
     fetch_interval: int = DEFAULT_FETCH_MINUTES  # minutes
     platform_interval: int = DEFAULT_PLATFORM_MINUTES  # minutes, PR/issue/pipeline refresh
+    patterns_set: bool = True  # False = no local choice, kvasir.toml [branches] decides (see repo_file)
 
 
 @dataclass
@@ -61,6 +62,7 @@ def load_repos() -> dict[str, RepoConfig]:
             branch_patterns=list(v.get("branch_patterns", DEFAULT_PATTERNS)),
             fetch_interval=int(v.get("fetch_interval", DEFAULT_FETCH_MINUTES)),
             platform_interval=int(v.get("platform_interval", DEFAULT_PLATFORM_MINUTES)),
+            patterns_set="branch_patterns" in v,
         )
         for url, v in _read("repos.toml").items()
     }
@@ -70,7 +72,8 @@ def save_repos(repos: dict[str, RepoConfig]) -> None:
     out = []
     for url, c in sorted(repos.items()):
         patterns = ", ".join(_q(p) for p in c.branch_patterns)
-        out.append(f"[{_q(url)}]\nbranch_patterns = [{patterns}]\nfetch_interval = {c.fetch_interval}\n"
+        pat = f"branch_patterns = [{patterns}]\n" if c.patterns_set else ""
+        out.append(f"[{_q(url)}]\n{pat}fetch_interval = {c.fetch_interval}\n"
                    f"platform_interval = {c.platform_interval}\n")
     _write("repos.toml", "\n".join(out))
 
