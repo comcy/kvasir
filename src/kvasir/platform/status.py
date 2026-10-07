@@ -1,0 +1,64 @@
+"""Status of an issue from facts (state, blockers, PRs, branches); `status:*` labels are only hints.
+
+Pure rules in `derive`; `issue_status` reads via GitHub (gh) and never writes.
+"""
+from __future__ import annotations
+
+import re
+
+from kvasir.platform.gh import GitHub
+from kvasir.platform.models import IssueStatus, Item, ItemStatus, PullRequest, Result
+
+LABEL_PREFIX = "status:"
+
+
+def _on_branch(number: int, branch: str | None) -> bool:
+    return bool(branch) and re.search(rf"(?:^|[/_-]){number}(?:[/_-]|$)", branch) is not None
+
+
+def derive(item: Item, blockers: list[Item], prs: list[PullRequest], branches: list[str]) -> ItemStatus:
+    """Order: closed -> blocked -> PR in review -> draft PR / branch -> open. Label only fills a gap or warns."""
+    n = item.number
+    mine = [p for p in prs if n in p.closing_issues or _on_branch(n, p.branch)]
+    open_blockers = [b for b in blockers if b.state == "open"]
+    if item.state == "closed":
+        dropped = item.state_reason == "not_planned" or "wontfix" in item.labels
+        status, reason = ("dropped", "Issue ist verworfen") if dropped else ("done", "Issue ist geschlossen")
+    elif open_blockers:
+        status, reason = "blocked", "Blocker " + ", ".join(f"#{b.number}" for b in open_blockers) + " offen"
+    elif any(p.state == "open" for p in mine):
+        p = next(p for p in mine if p.state == "open")
+        status, reason = "in_review", f"PR #{p.number} ist bereit"
+    elif mine:
+        status, reason = "in_progress", f"PR #{mine[0].number} ist Draft"
+    elif b := next((b for b in branches if _on_branch(n, b)), None):
+        status, reason = "in_progress", f"Branch {b}"
+    else:
+        status, reason = "open", None
+    label = next((x[len(LABEL_PREFIX):] for x in item.labels if x.startswith(LABEL_PREFIX)), None)
+    source, hint = "fact", None
+    if label and status == "open":
+        status, source, reason = label.replace("-", "_"), "label", None
+    elif label and label.replace("-", "_") != status:
+        hint = f"Label sagt {label}, {reason}"
+    return ItemStatus(item, tuple(blockers), status, source, reason, hint)
+
+
+def issue_status(gh: GitHub, number: int) -> Result[IssueStatus]:
+    """Issue + sub-issues, each with blockers and status. First failing gh call ends it with its Error."""
+    root = gh.item(number)
+    if not root.ok:
+        return root
+    subs = gh.sub_issues(number)
+    prs = gh.pull_requests(limit=100, state="open") if subs.ok else subs
+    branches = gh.branch_names() if prs.ok else prs
+    for r in (subs, prs, branches):
+        if not r.ok:
+            return r
+    out = []
+    for it in [root.data, *subs.data]:
+        bl = gh.blocked_by(it.number)
+        if not bl.ok:
+            return bl
+        out.append(derive(it, bl.data, prs.data, branches.data))
+    return Result(data=IssueStatus(gh.slug, out[0], tuple(out[1:])))

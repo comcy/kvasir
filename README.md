@@ -140,6 +140,12 @@ Pro Repo festgelegt (Platzhalter: `{type}`, `{id}`, `{slug}`, `{date}`):
 
 Ein neuer Branch ist gültig, wenn er mindestens eine Vorlage trifft. Ein Verstoß ist nur eine Warnung.
 
+## `kvasir status #<nr>`
+
+Sub-Issues, `blocked_by`-Beziehungen und Status eines GitHub-Issues, rein lesend über `gh`. Repo aus `origin` des aktuellen Ordners oder `--repo owner/repo`; `--format json` für die maschinenlesbare Fassung.
+
+Status aus Tatsachen, in dieser Reihenfolge: geschlossen = erledigt (Grund "nicht geplant" oder Label `wontfix` = verworfen), offener Blocker = blockiert, offener PR (nicht Draft) = in Review, Draft-PR oder Branch mit der Issue-Nummer im Namen = in Arbeit, sonst offen. Ein `status:*`-Label widerspricht nur als Hinweis (`! Label sagt in-review, PR #7 ist Draft`); es ersetzt den Status nur dort, wo keine Tatsache vorliegt, und ist dann mit "(laut Label)" gekennzeichnet. Grenzen: höchstens 100 Sub-Issues, Blocker und offene PRs; Branch-Treffer über die Nummer als eigenes Namensstück (`feat/5-x`, nicht `feat/15-x`).
+
 ## `kvasir doctor`
 
 Prüft die Voraussetzungen, jederzeit und ohne ein Repo zu registrieren. Je Punkt `✓` (ok), `✗` (Fehler) oder `!` (Warnung) mit passendem Befehl zur Behebung. Exit-Code 1 bei mindestens einem `✗`, sonst 0.

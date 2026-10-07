@@ -1,0 +1,34 @@
+[
+ {
+  "number": 17,
+  "title": "Bookmarks und Seiten als Timeline-Einträge",
+  "state": "closed",
+  "state_reason": "completed",
+  "html_url": "https://github.com/comcy/comcy.github.io/issues/17",
+  "repository_url": "https://api.github.com/repos/comcy/comcy.github.io",
+  "labels": [
+   {
+    "name": "enhancement"
+   },
+   {
+    "name": "ready-for-agent"
+   }
+  ]
+ },
+ {
+  "number": 19,
+  "title": "Timeline lädt beim Scrollen weitere Einträge nach",
+  "state": "closed",
+  "state_reason": "completed",
+  "html_url": "https://github.com/comcy/comcy.github.io/issues/19",
+  "repository_url": "https://api.github.com/repos/comcy/comcy.github.io",
+  "labels": [
+   {
+    "name": "enhancement"
+   },
+   {
+    "name": "ready-for-agent"
+   }
+  ]
+ }
+]

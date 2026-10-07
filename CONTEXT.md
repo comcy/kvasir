@@ -28,6 +28,10 @@ Freitext zu einem Worktree (Taste `m`, oder Abschlussnotiz beim Entfernen). Einz
 - **Synchronisierbar** (pro Remote-URL): Branch-Vorlagen, Fetch-Intervall.
 - **Lokal** (pro Rechner): lokaler Pfad je Repo, `open_command`.
 
+### Item, Beziehung, Status
+- **Item:** ein GitHub-Issue als reine Tatsachen (Zustand, Schließgrund, Labels). **Beziehung:** Sub-Issue oder `blocked_by` zwischen Items.
+- **Status** (erledigt, verworfen, blockiert, in Review, in Arbeit, offen) kommt aus Tatsachen, nie aus Labels. Ein `status:*`-Label ist nur Hinweis bei Widerspruch oder Status "laut Label", wo keine Tatsache existiert. Siehe `kvasir status`.
+
 ## Was es hier nicht gibt
 
 - Kein Hintergrunddienst: Fetch läuft nur, solange die TUI offen ist.
