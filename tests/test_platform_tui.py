@@ -292,3 +292,105 @@ def test_app_azure_repo_error_state(make_repo, monkeypatch):
             assert "#12" in str(app.query_one(EntryList).get_option_at_index(1).prompt)
 
     asyncio.run(go())
+
+
+# --- Stepper + Status im Detail-Panel (#54) ---
+
+class StatusFake(Fake):
+    """Fake mit den Lese-Methoden, die `issue_status` braucht (nur lesend, alles gefaked)."""
+    slug = "o/a"
+
+    def __init__(self, *a, subs=(), blockers=(), **kw):
+        super().__init__(*a, **kw)
+        self.subs, self.blockers = list(subs), list(blockers)
+
+    def _ro(self, name, data):
+        self.calls.append(name)
+        return Result(error=self.error) if self.error else Result(data=data)
+
+    def pull_requests(self, limit=30, state="all"):
+        return super().pull_requests(limit)
+
+    def item(self, number):
+        from kvasir.platform.models import Item
+        return self._ro("item", Item("o/a", number, "T", "open"))
+
+    def sub_issues(self, number):
+        return self._ro("subs", self.subs)
+
+    def blocked_by(self, number):
+        return self._ro("blocked", self.blockers)
+
+    def branch_names(self):
+        return self._ro("branches", ["feat/3-x"])
+
+
+def _card(**kw):
+    return pd.StatusCard(**{"number": 3, "status": "blocked", "source": "fact", **kw})
+
+
+def test_status_text_stepper_blockers_hints():
+    card = _card(reason="Blocker #2 offen", blockers=("#2 (open)",), hint="Label sagt open", notices=("Frist?",),
+                 steps=("done|Branch", "current|PR Draft", "open|gemergt"), previous=(1,))
+    t = pv.detail_text(_info(work_item_number=3, status=card))
+    assert "Status #3: blockiert" in t and "blockiert von: #2 (open)" in t and "! Label sagt open" in t
+    assert "! Frist?" in t and "[x] Branch" in t and "[>] PR Draft" in t and "[ ] gemergt" in t
+    assert "Vorgänger: #1" in t
+
+
+def test_status_text_clear_states():
+    assert "kein Issue" in pv.detail_text(_info())
+    assert "#3: nicht geladen" in pv.detail_text(_info(work_item_number=3))
+    assert "(laut Label)" in pv.detail_text(_info(work_item_number=3, status=_card(status="open", source="label")))
+    assert "Status" not in pv.detail_text(_info(work_item_number=3), cli="az")
+
+
+def test_refresh_caches_status_and_snapshot_merges():
+    from kvasir.platform.models import Item
+    f = StatusFake([pr(branch="feat/3-x", closing_issues=(3,))], items={3: WorkItem(3, "Bug", "open", "u")},
+                   blockers=[Item("o/a", 2, "B", "open")])
+    assert pd.refresh(URL, ["{type}/{id}-{slug}"], ["feat/3-x", "main"], f) is None
+    c = pd.snapshot(URL, ["{type}/{id}-{slug}"], ["feat/3-x"]).info("feat/3-x").status
+    assert c.status == "blocked" and c.blockers == ("#2 (open)",) and c.steps[0] == "done|Branch"
+
+
+def test_refresh_status_error_is_reported_and_old_card_stays():
+    pd.refresh(URL, ["{type}/{id}-{slug}"], ["feat/3-x"], StatusFake([pr(branch="feat/3-x")],
+               items={3: WorkItem(3, "Bug", "open", "u")}))
+    e = Error(ErrorKind.NETWORK, "down")
+    f = StatusFake([pr(branch="feat/3-x")], items={3: WorkItem(3, "Bug", "open", "u")})
+    orig = f.item
+    f.item = lambda n: Result(error=e)
+    assert pd.refresh(URL, ["{type}/{id}-{slug}"], ["feat/3-x"], f) == e
+    assert pd.snapshot(URL, ["{type}/{id}-{slug}"], ["feat/3-x"], e).info("feat/3-x").status is not None
+    f.item = orig
+
+
+def test_app_detail_shows_status_u_refreshes_and_scrolls(make_repo, monkeypatch):
+    from kvasir.platform.models import Item
+    root = _register(make_repo)
+    subprocess.run(["git", "-C", str(root), "worktree", "add", "-q", "-b", "feat/3-x", "feat/3-x", "main"], check=True)
+    save_repos({URL: RepoConfig(branch_patterns=["{type}/{id}-{slug}"])})
+    f = StatusFake([pr(branch="feat/3-x", closing_issues=(3,))], items={3: WorkItem(3, "Bug", "open", "u")},
+                   blockers=[Item("o/a", 2, "B", "open")])
+    monkeypatch.setattr("kvasir.tui.platform_data.provider_for", lambda repo: f)
+
+    async def go():
+        app = KvasirApp()
+        async with app.run_test(size=(85, 30)) as pilot:  # smallest width that still shows the detail column
+            await _wait(pilot, lambda: app.rows and f.calls.count("item") >= 1)
+            el = app.query_one(EntryList)
+            el.highlighted = next(i for i, e in enumerate(el.index_map) if e is not None
+                                  and getattr(app.entries[e], "branch", None) == "feat/3-x")
+            await _wait(pilot, lambda: "blockiert von: #2 (open)" in str(app.query_one(DetailPanel).content))
+            assert "[x] Branch" in str(app.query_one(DetailPanel).content)
+            f.blockers = []
+            n = f.calls.count("item")
+            await pilot.press("u")
+            await _wait(pilot, lambda: f.calls.count("item") > n)
+            await _wait(pilot, lambda: "blockiert von" not in str(app.query_one(DetailPanel).content))
+            app.query_one(EntryList).focus()
+            await pilot.press("l")  # detail column is focusable -> keyboard scrolling
+            assert app.focused.id == "detail-col"
+
+    asyncio.run(go())

@@ -6,7 +6,7 @@ is cheap, works offline and is what the UI shows. Interfaces for the overview (#
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from kvasir.platform import (
@@ -22,13 +22,37 @@ from kvasir.platform import (
     provider_for,
     work_item_for,
 )
+from kvasir.platform.models import ItemStatus
+from kvasir.platform.status import issue_status
 from kvasir.worktrees import Branch, RepoView, Worktree
 
 PR_LIMIT = 50
 RUN_LIMIT = 50
 RUN_DAYS = 7
 MAX_ITEMS = 20  # ponytail: one work item call per id, capped; raise if repos with many branches need more
+MAX_STATUS = 8  # ponytail: issue_status is ~5 gh calls per issue, so far fewer than MAX_ITEMS
 FATAL = (ErrorKind.MISSING_CLI, ErrorKind.MISSING_EXTENSION, ErrorKind.NOT_LOGGED_IN, ErrorKind.NETWORK, ErrorKind.RATE_LIMIT)
+
+
+@dataclass(frozen=True)
+class StatusCard:
+    """Flat, cacheable extract of `ItemStatus` (the `kvasir status` core) for the detail panel."""
+    number: int
+    status: str
+    source: str
+    reason: str | None = None
+    hint: str | None = None
+    blockers: tuple[str, ...] = ()  # "#13 (open)"
+    notices: tuple[str, ...] = ()
+    steps: tuple[str, ...] = ()  # "done|name", "current|name", "open|name"
+    previous: tuple[int, ...] = ()
+
+
+def card_of(st: ItemStatus) -> StatusCard:
+    sp = st.stepper
+    return StatusCard(st.item.number, st.status, st.source, st.reason, st.hint,
+                      tuple(f"#{b.number} ({b.state})" for b in st.blocked_by), st.notices,
+                      tuple(f"{x.state}|{x.name}" for x in sp.steps) if sp else (), sp.previous if sp else ())
 
 
 @dataclass(frozen=True)
@@ -38,6 +62,7 @@ class BranchInfo:
     work_item_number: int | None  # known id, even when the issue itself is not cached
     runs: tuple[PipelineRun, ...]
     loaded: bool  # False: nothing fetched yet (no cache), so "kein PR" would be a lie
+    status: StatusCard | None = None
 
 
 @dataclass
@@ -49,13 +74,15 @@ class Snapshot:
     fetched_at: datetime | None  # of the PR list; None = never fetched
     error: Error | None = None  # last refresh error; the data above is the old state
     cli: str = "gh"  # CLI of the repo's platform, for texts: "gh" | "az"
+    cards: dict[int, StatusCard] = field(default_factory=dict)  # issue number -> status (GitHub only)
 
     def info(self, branch: str) -> BranchInfo:
         mine = [p for p in self.prs if p.branch == branch]  # newest first
         pr = next((p for p in mine if p.state in ("open", "draft")), mine[0] if mine else None)
         n = work_item_for(branch, self.patterns, self.prs)
         runs = tuple(r for r in self.runs if r.branch == branch)
-        return BranchInfo(pr, self.items.get(n) if n else None, n, runs, self.fetched_at is not None)
+        return BranchInfo(pr, self.items.get(n) if n else None, n, runs, self.fetched_at is not None,
+                          self.cards.get(n) if n else None)
 
 
 def platform_of(url: str) -> PlatformRepo | None:
@@ -92,13 +119,15 @@ def snapshot(url: str, patterns: list[str], branches: list[str], error: Error | 
     """Cache-only view (no network)."""
     e = cache.read(url, "pull_requests", PullRequest)
     prs = e.items if e else []
-    items = {}
+    items, cards = {}, {}
     for n in _numbers(branches, patterns, prs):
         if found := _cached(url, f"work_item:{n}", WorkItem):
             items[n] = found[0]
+        if found := _cached(url, f"status:{n}", StatusCard):
+            cards[n] = found[0]
     plat = platform_of(url)
     return Snapshot(prs, _cached(url, "pipeline_runs", PipelineRun), items, patterns,
-                    e.fetched_at if e else None, error, "az" if plat and plat.kind == "azure" else "gh")
+                    e.fetched_at if e else None, error, "az" if plat and plat.kind == "azure" else "gh", cards)
 
 
 def refresh(url: str, patterns: list[str], branches: list[str], provider: Provider | None = None) -> Error | None:
@@ -124,10 +153,18 @@ def refresh(url: str, patterns: list[str], branches: list[str], provider: Provid
     else:
         err = err or runs.error
     known = prs.data if prs.ok else _cached(url, "pull_requests", PullRequest)
-    for n in _numbers(branches, patterns, known):
+    numbers = _numbers(branches, patterns, known)
+    for n in numbers:
         res = p.work_item(n)
         if res.ok:
             cache.write(url, f"work_item:{n}", [res.data])
         elif res.error.kind in FATAL:
             return err or res.error
+    if plat.kind == "github" and hasattr(p, "sub_issues"):  # status = same core as `kvasir status`
+        for n in numbers[:MAX_STATUS]:
+            res = issue_status(p, n)
+            if res.ok:
+                cache.write(url, f"status:{n}", [card_of(res.data.issue)])
+            elif res.error.kind in FATAL:
+                return err or res.error
     return err

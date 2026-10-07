@@ -10,7 +10,7 @@ from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.timer import Timer
 from textual.widgets import Footer, OptionList, Static
 
@@ -41,7 +41,7 @@ class KvasirApp(App):
     .narrow #detail-col { display: none; }
     .narrow #repos-col { min-width: 10; }
     RepoList, EntryList { height: 1fr; padding: 0 1; border: none; }
-    DetailPanel { height: 1fr; padding: 0 1; }
+    DetailPanel { height: auto; padding: 0 1; }
     """
     BINDINGS: ClassVar[list[Binding]] = [
         Binding("q", "quit", "Quit"),
@@ -79,7 +79,7 @@ class KvasirApp(App):
                 yield RepoList(id="repos")
             with Vertical(id="entries-col", classes="col"):
                 yield EntryList(id="entries")
-            with Vertical(id="detail-col", classes="col"):
+            with VerticalScroll(id="detail-col", classes="col"):  # focusable: arrows/PgUp/PgDn scroll the stepper
                 yield DetailPanel(id="detail")
         yield Footer(show_command_palette=False)  # the palette hint would cut the key labels at 100 columns
 
@@ -291,7 +291,7 @@ class KvasirApp(App):
         url = self.rows[ri].url if ri is not None and ri < len(self.rows) else ""
         name = getattr(item, "branch", None) or getattr(item, "name", None)
         snap, branch = self.platform.get(url), platform_data.branch_of(item) if item else None
-        extra = platform_view.detail_text(snap.info(branch), snap.error) if snap and branch else ""
+        extra = platform_view.detail_text(snap.info(branch), snap.error, cli=snap.cli) if snap and branch else ""
         self.query_one(DetailPanel).show(item, notes.latest(url, name) if name else None, extra)
 
     def action_toggle_remote(self) -> None:
