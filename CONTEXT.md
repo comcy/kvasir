@@ -27,7 +27,7 @@ Freitext zu einem Worktree (Taste `m`, oder Abschlussnotiz beim Entfernen). Einz
 ### Konfiguration
 - **Synchronisierbar** (pro Remote-URL): Branch-Vorlagen, Fetch-Intervall.
 - **Lokal** (pro Rechner): lokaler Pfad je Repo, `open_command`.
-- **Im Repo geteilt:** `kvasir.toml` im Repo-Wurzelverzeichnis (`[branches] patterns`, optional `[[phases]]` als Überschreibung) und `workflow/phases.tsv` (Quelle der Phasen, auch ohne kvasir lesbar). Nur Detektor-Namen, nie Code. Vorrang: lokal (`repos.toml`, nur wenn gesetzt) vor Repo-Datei vor eingebautem Standard; Phasen: `kvasir.toml` vor `workflow/phases.tsv` vor Standard. `kvasir init` legt `kvasir.toml` an, `kvasir doctor` prüft sie.
+- **Im Repo geteilt:** `kvasir.toml` im Repo-Wurzelverzeichnis (`[branches] patterns`, optional `[[phases]]` als Überschreibung) und `workflow/phases.tsv` (Quelle der Phasen, auch ohne kvasir lesbar). Nur Detektor-Namen, nie Code. Vokabular der Detektoren: `workflow/detectors.tsv` des Repos (Quelle; `kvasir doctor` prüft dagegen, ohne Datei gilt der eingebaute Satz). Was kvasir nicht auswerten kann, erscheint als unbekannt (Phase fehlt) mit doctor-Hinweis. Vorrang: lokal (`repos.toml`, nur wenn gesetzt) vor Repo-Datei vor eingebautem Standard; Phasen: `kvasir.toml` vor `workflow/phases.tsv` vor Standard. `kvasir init` legt `kvasir.toml` an, `kvasir doctor` prüft sie.
 
 ### Item, Beziehung, Status
 - **Item:** ein GitHub-Issue als reine Tatsachen (Zustand, Schließgrund, Labels). **Beziehung:** Sub-Issue oder `blocked_by` zwischen Items.

@@ -215,3 +215,74 @@ def test_text_output_shows_stepper(monkeypatch, tmp_path):
     ticket(monkeypatch, blockers=[issue(3, "closed", "completed")])
     out = runner.invoke(app, ["status", "#1", "--repo", "o/r"]).output
     assert "Schritte: [>] Branch -> [ ] PR Draft" in out and "Vorgänger: #3" in out
+
+
+# --- Detektoren aus workflow/detectors.tsv (#64), über eine kvasir.toml-Phase je Detektor
+
+def one_phase(tmp_path, monkeypatch, spec, *files):
+    cwd_with(tmp_path, monkeypatch, *files)
+    (tmp_path / ".git").mkdir(exist_ok=True)
+    (tmp_path / "kvasir.toml").write_text(f'[[phases]]\nname = "P"\ndone_when = ["{spec}"]\n')
+
+
+def state(spec, tmp_path, monkeypatch, *files):
+    one_phase(tmp_path, monkeypatch, spec, *files)
+    return [x for _, x in steps(status_of()["issue"])]
+
+
+def test_issue_open(monkeypatch, tmp_path):
+    feature(monkeypatch, subs=[issue(5)])
+    assert state("issue_open", tmp_path, monkeypatch) == ["done"]
+    feature(monkeypatch, root=issue(1, "closed", "completed"), subs=[issue(5)])
+    assert state("issue_open", tmp_path, monkeypatch) == ["current"]
+
+
+def test_subissues_closed(monkeypatch, tmp_path):
+    feature(monkeypatch, subs=[issue(5, "closed", "completed"), issue(6)])
+    assert state("subissues_closed", tmp_path, monkeypatch) == ["current"]
+    feature(monkeypatch, subs=[issue(5, "closed", "completed")])
+    assert state("subissues_closed", tmp_path, monkeypatch) == ["done"]
+
+
+def test_no_open_blockers(monkeypatch, tmp_path):
+    feature(monkeypatch, subs=[issue(5)], rootbl=[issue(9)])
+    assert state("no_open_blockers", tmp_path, monkeypatch) == ["current"]
+    feature(monkeypatch, subs=[issue(5)], rootbl=[issue(9, "closed", "completed")])
+    assert state("no_open_blockers", tmp_path, monkeypatch) == ["done"]
+
+
+STATES = "id\tkind\n" + "needs-triage\ttriage\nstatus:in-progress\tstatus\n"
+
+
+def test_has_label_kind(monkeypatch, tmp_path):
+    feature(monkeypatch, root=issue(1, labels=["needs-triage"]), subs=[issue(5)])
+    one_phase(tmp_path, monkeypatch, "has_label_kind:triage")
+    assert state("has_label_kind:triage", tmp_path, monkeypatch) == []  # ohne states.tsv unbekannt
+    (tmp_path / "workflow").mkdir()
+    (tmp_path / "workflow/states.tsv").write_text(STATES)
+    assert state("has_label_kind:triage", tmp_path, monkeypatch) == ["done"]
+    assert state("has_label_kind:status", tmp_path, monkeypatch) == ["current"]
+
+
+def test_pr_checklist(monkeypatch, tmp_path):
+    def prs(*boxes):
+        return [{**pr(7, "feat/5-x", closes=[5]), "body": body(*boxes)}]
+    feature(monkeypatch, subs=[issue(5)], prs=prs(("Lokale Abnahme", True)))
+    assert state("pr_checklist:Lokale Abnahme", tmp_path, monkeypatch) == ["done"]
+    feature(monkeypatch, subs=[issue(5)], prs=prs(("Lokale Abnahme", False)))
+    assert state("pr_checklist:Lokale Abnahme", tmp_path, monkeypatch) == ["current"]
+    feature(monkeypatch, subs=[issue(5)], prs=prs(("Anderes", True)))
+    assert state("pr_checklist:Lokale Abnahme", tmp_path, monkeypatch) == []  # kein solches Kästchen = unbekannt
+    feature(monkeypatch, subs=[issue(5)])
+    assert state("pr_checklist:Lokale Abnahme", tmp_path, monkeypatch) == ["current"]  # kein PR
+
+
+def test_openspec_archived(monkeypatch, tmp_path):
+    none = {"list": json.dumps({"root": {"path": "/x"}, "changes": []})}
+    feature(monkeypatch, subs=[issue(5)], openspec=none)
+    assert state("openspec_archived", tmp_path, monkeypatch) == ["current"]
+    assert state("openspec_archived", tmp_path, monkeypatch, "openspec/changes/archive/2026-01-01-x/proposal.md") == ["done"]
+    feature(monkeypatch, subs=[issue(5)], openspec={**none, "list": OS_LIST, "status --change c1": json.dumps({"isComplete": True})})
+    assert state("openspec_archived", tmp_path, monkeypatch, "openspec/changes/archive/2026-01-01-x/p.md") == ["current"]  # aktiver Change
+    feature(monkeypatch, subs=[issue(5)])  # kein openspec
+    assert state("openspec_archived", tmp_path, monkeypatch) == []

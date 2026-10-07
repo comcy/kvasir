@@ -1,0 +1,12 @@
+# Phasen des Prozesses in Reihenfolge. tool: Skill oder Befehl (nur Anzeige). done_when: Detektoren (Komma = UND) oder -
+# (nicht erkennbar). level: required oder optional. enabled (optional): no schaltet eine Phase ab.
+id	name	tool	done_when	level
+S	Setup (einmalig je Klon)	scripts/setup.py	file_exists:openspec/config.yaml	required
+0	Eingang	/triage	has_label_kind:triage	required
+1	Idee schärfen	/grilling	openspec_change_exists	required
+2	Anforderungen festhalten	/openspec-propose	openspec_artifacts_complete	required
+3	Arbeit schneiden	/to-tickets	subissues_exist	required
+4	Bauen und prüfen	/implement	subissues_closed	required
+4b	Abnahme	-	pr_checklist:Lokale Abnahme	optional
+5	Abschließen	/openspec-archive-change	openspec_archived	required
+6	Wissen sichern	-	-	required

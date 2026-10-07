@@ -33,7 +33,11 @@ DETECTORS: dict[str, str | tuple[str, ...]] = {
     "issue_exists": "-", "label": "text", "subissues_exist": "-", "issue_closed": "-", "file_exists": "path",
     "openspec_change_exists": "-", "openspec_artifacts_complete": "-",
     "pr_state": ("draft", "ready", "merged"), "checks": ("success", "failure"),
+    "issue_open": "-", "has_label_kind": ("triage", "status"), "no_open_blockers": "-", "subissues_closed": "-",
+    "pr_checklist": "text", "openspec_archived": "-",
 }
+# Vocabulary of a repo = workflow/detectors.tsv (see kvasir.repo_file); kvasir can only evaluate DETECTORS.
+Vocabulary = dict[str, str | tuple[str, ...]]
 _BOX = re.compile(r"^\s*[-*]\s*\[( |x|X)\]\s*(.*)$", re.MULTILINE)
 
 
@@ -43,6 +47,7 @@ class Facts:
     subs: tuple[Item, ...]
     prs: tuple[PullRequest, ...]  # PRs of the item (feature level: of its sub-issues), merged ones included
     branch: bool = False
+    blockers: tuple[Item, ...] = ()
 
 
 def _openspec() -> tuple[bool, bool] | None:
@@ -64,10 +69,28 @@ def _openspec() -> tuple[bool, bool] | None:
     return bool(names), bool(names) and all(d.get("isComplete") for d in done)
 
 
-def check_detector(spec: str) -> str | None:
-    """Error text when `spec` ("name" or "name:arg") is not in the vocabulary, else None."""
+def _archived() -> bool | None:
+    """Archived change(s) and no active one. ponytail: not tied to the issue, fine as phases run in order."""
+    o = _openspec()
+    return None if o is None else (not o[0]) and any(p.is_dir() for p in Path("openspec/changes/archive").glob("*"))
+
+
+def _label_kinds() -> dict[str, str] | None:
+    """label -> kind from workflow/states.tsv (cwd = checkout); None when missing."""
+    try:
+        lines = [x for x in Path("workflow/states.tsv").read_text(encoding="utf-8").splitlines()
+                 if x.strip() and not x.startswith("#")]
+    except OSError:
+        return None
+    head = lines[0].split("\t") if lines else []
+    rows = [dict(zip(head, x.split("\t"), strict=False)) for x in lines[1:]]
+    return {r["id"]: r.get("kind", "") for r in rows if "id" in r and r.get("enabled", "").lower() != "no"}
+
+
+def check_detector(spec: str, vocab: Vocabulary | None = None) -> str | None:
+    """Error text when `spec` ("name" or "name:arg") is not in the vocabulary (default: built-in), else None."""
     name, _, arg = spec.partition(":")
-    kind = DETECTORS.get(name)
+    kind = (DETECTORS if vocab is None else vocab).get(name)
     if kind is None:
         return f"unknown detector {name}"
     if kind == "-":
@@ -86,8 +109,24 @@ def detect(spec: str, f: Facts) -> bool | None:
         return True
     if kind == "label":
         return arg in f.item.labels
+    if kind == "issue_open":
+        return f.item.state == "open"
+    if kind == "no_open_blockers":
+        return not any(b.state == "open" for b in f.blockers)
     if kind == "subissues_exist":
         return bool(f.subs)
+    if kind == "subissues_closed":
+        return bool(f.subs) and all(x.state == "closed" for x in f.subs)
+    if kind == "has_label_kind":
+        kinds = _label_kinds()
+        return None if kinds is None else any(kinds.get(x) == arg for x in f.item.labels)
+    if kind == "pr_checklist":  # False without PR; None when no PR has such a box
+        if not ps:
+            return False
+        boxes = [b for p in ps if (b := _box(p.body, arg.lower())) is not None]
+        return all(boxes) if boxes else None
+    if kind == "openspec_archived":
+        return _archived()
     if kind == "issue_closed":
         return f.item.state == "closed"
     if kind == "file_exists":

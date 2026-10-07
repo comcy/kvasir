@@ -73,7 +73,7 @@ def _with_stepper(st: ItemStatus, feature: bool, subs: list[Item], prs: list[Pul
     own = _prs_of(n, prs)
     if feature:
         own = [p for s in subs for p in _prs_of(s.number, prs)]
-    f = Facts(st.item, tuple(subs), tuple(own), any(_on_branch(n, b) for b in branches))
+    f = Facts(st.item, tuple(subs), tuple(own), any(_on_branch(n, b) for b in branches), st.blocked_by)
     prev = tuple(b.number for b in st.blocked_by if b.state == "closed")
     return replace(st, stepper=feature_stepper(f, prev, phases) if feature else ticket_stepper(f, prev))
 
