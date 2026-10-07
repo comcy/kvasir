@@ -5,9 +5,11 @@ Pure rules in `derive`; `issue_status` reads via GitHub (gh) and never writes.
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 
 from kvasir.platform.gh import GitHub
 from kvasir.platform.models import IssueStatus, Item, ItemStatus, PullRequest, Result
+from kvasir.platform.stepper import Facts, feature_stepper, ticket_stepper
 
 LABEL_PREFIX = "status:"
 
@@ -58,13 +60,30 @@ def derive(item: Item, blockers: list[Item], prs: list[PullRequest], branches: l
     return ItemStatus(item, tuple(blockers), status, source, reason, hint, _notices(item, open_blockers))
 
 
+def _prs_of(n: int, prs: list[PullRequest]) -> list[PullRequest]:
+    """PRs of issue n, live (open/draft) before merged; closed-unmerged ones don't count."""
+    mine = [p for p in prs if p.state != "closed" and (n in p.closing_issues or _on_branch(n, p.branch))]
+    return sorted(mine, key=lambda p: p.state == "merged")
+
+
+def _with_stepper(st: ItemStatus, feature: bool, subs: list[Item], prs: list[PullRequest],
+                  branches: list[str]) -> ItemStatus:
+    n = st.item.number
+    own = _prs_of(n, prs)
+    if feature:
+        own = [p for s in subs for p in _prs_of(s.number, prs)]
+    f = Facts(st.item, tuple(subs), tuple(own), any(_on_branch(n, b) for b in branches))
+    prev = tuple(b.number for b in st.blocked_by if b.state == "closed")
+    return replace(st, stepper=(feature_stepper if feature else ticket_stepper)(f, prev))
+
+
 def issue_status(gh: GitHub, number: int) -> Result[IssueStatus]:
     """Issue + sub-issues, each with blockers and status. First failing gh call ends it with its Error."""
     root = gh.item(number)
     if not root.ok:
         return root
     subs = gh.sub_issues(number)
-    prs = gh.pull_requests(limit=100, state="open") if subs.ok else subs
+    prs = gh.pull_requests(limit=100, state="all") if subs.ok else subs
     branches = gh.branch_names() if prs.ok else prs
     for r in (subs, prs, branches):
         if not r.ok:
@@ -74,5 +93,8 @@ def issue_status(gh: GitHub, number: int) -> Result[IssueStatus]:
         bl = gh.blocked_by(it.number)
         if not bl.ok:
             return bl
-        out.append(derive(it, bl.data, prs.data, branches.data))
+        live = [p for p in prs.data if p.state in ("open", "draft")]
+        feature = it is root.data and bool(subs.data)
+        out.append(_with_stepper(derive(it, bl.data, live, branches.data), feature, subs.data, prs.data,
+                                 branches.data))
     return Result(data=IssueStatus(gh.slug, out[0], tuple(out[1:])))

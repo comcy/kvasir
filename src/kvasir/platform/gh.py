@@ -25,7 +25,7 @@ TIMEOUT = 30  # seconds
 _ENV = {**os.environ, "GH_PROMPT_DISABLED": "1", "NO_COLOR": "1"}
 
 PR_FIELDS = ("number,title,state,isDraft,reviewDecision,statusCheckRollup,url,author,headRefName,"
-             "closingIssuesReferences,createdAt")
+             "closingIssuesReferences,createdAt,body")
 SEARCH_FIELDS = "number,title,state,isDraft,url,repository,author,createdAt"  # no checks/reviews/branch in search
 ISSUE_FIELDS = "number,title,state,labels,assignees,url"
 ISSUE_BOARD_FIELDS = ISSUE_FIELDS + ",projectItems"  # needs read:project when the issue is on a board
@@ -107,7 +107,7 @@ def parse_pr(d: dict) -> PullRequest:
         checks=_checks(d.get("statusCheckRollup")),
         closing_issues=tuple(i["number"] for i in d.get("closingIssuesReferences") or ()),
         repo=(d.get("repository") or {}).get("nameWithOwner"),
-        created_at=d.get("createdAt"),
+        created_at=d.get("createdAt"), body=d.get("body"),
     )
 
 

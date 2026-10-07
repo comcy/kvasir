@@ -59,6 +59,7 @@ class PullRequest:
     closing_issues: tuple[int, ...] = ()
     repo: str | None = None  # "owner/repo", set by cross-repo search
     created_at: str | None = None  # ISO 8601
+    body: str | None = None  # PR description (checklist for the stepper)
 
 
 @dataclass(frozen=True)
@@ -117,6 +118,19 @@ class Item:
 
 
 @dataclass(frozen=True)
+class Step:
+    name: str
+    state: str  # done | current | open
+
+
+@dataclass(frozen=True)
+class Stepper:
+    level: str  # feature | ticket
+    steps: tuple[Step, ...]
+    previous: tuple[int, ...] = ()  # closed blockers
+
+
+@dataclass(frozen=True)
 class ItemStatus:
     """Item + its relations + status derived from facts. Status: done | dropped | blocked | in_review |
     in_progress | open; a `status:*` label only fills in where no fact exists (source "label")."""
@@ -127,6 +141,7 @@ class ItemStatus:
     reason: str | None = None  # why the fact status holds, e.g. "PR #7 ist Draft"
     hint: str | None = None  # a status:* label that contradicts the fact status
     notices: tuple[str, ...] = ()  # Termin-Hinweise (unlesbare Zeile, Konflikte); keine Bewertung
+    stepper: Stepper | None = None
 
 
 @dataclass(frozen=True)
