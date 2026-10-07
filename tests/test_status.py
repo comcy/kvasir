@@ -34,7 +34,9 @@ class FakeGh:
         if args[0] != "gh":  # git etc. run for real (in tmp dirs)
             return self.real(args, **kw)
         self.calls.append(args)
-        key = " ".join(args[1:3]) if args[1] == "pr" else args[2].split("?")[0]
+        key = " ".join(args[1:3]) if args[1] == "pr" else args[2]
+        if key not in self.routes:  # Route mit Query (state=open) hat Vorrang vor der ohne
+            key = key.split("?")[0]
         ans = self.routes[key]  # KeyError = unerwarteter Aufruf = Testfehler
         if isinstance(ans, tuple):
             return subprocess.CompletedProcess(args, ans[0], b"", ans[1].encode())
