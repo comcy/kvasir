@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from kvasir.platform import Error, ErrorKind, PipelineRun, PullRequest, WorkItem
 from kvasir.tui.data import format_age
 from kvasir.tui.layout import entry_name
-from kvasir.tui.platform_data import BranchInfo, Snapshot, branch_of
+from kvasir.tui.platform_data import BranchInfo, Snapshot, StatusCard, branch_of
 from kvasir.worktrees import Branch, Worktree
 
 CHECKS = {"success": "✓", "failure": "✗", "pending": "…"}
@@ -88,6 +88,31 @@ def _item(wi: WorkItem | None, number: int | None) -> list[str]:
     return [f"Work Item #{wi.number}  {wi.title}", "  " + " · ".join(bits)]
 
 
+STATUS_NAMES = {"done": "erledigt", "dropped": "verworfen", "blocked": "blockiert", "in_review": "in Review",
+                "in_progress": "in Arbeit", "open": "offen"}
+STEP_MARKS = {"done": "[x]", "current": "[>]", "open": "[ ]"}
+
+
+def _status(card: StatusCard | None, number: int | None) -> list[str]:
+    """Status block (same facts as `kvasir status`): status, blockers, hints, stepper; one short line each."""
+    if number is None:
+        return ["Status: kein Issue (Branch ohne Nummer)"]
+    if card is None:
+        return [f"Status #{number}: nicht geladen"]
+    name = STATUS_NAMES.get(card.status, card.status) + (" (laut Label)" if card.source == "label" else "")
+    lines = [f"Status #{number}: {name}"]
+    if card.reason:
+        lines.append(f"  {card.reason}")
+    if card.blockers:
+        lines.append("  blockiert von: " + ", ".join(card.blockers))
+    lines += [f"  ! {t}" for t in (card.hint, *card.notices) if t]
+    if card.steps:
+        lines += ["Stepper:", *(f"  {STEP_MARKS[st]} {n}" for st, _, n in (x.partition("|") for x in card.steps))]
+    if card.previous:
+        lines.append("  Vorgänger: " + ", ".join(f"#{n}" for n in card.previous))
+    return lines
+
+
 def _run(r: PipelineRun, now: float | None) -> str:
     sym = ("…" if r.status != "completed" else "✓" if r.conclusion == "success"
            else "✗" if r.conclusion == "failure" else r.conclusion or "?")
@@ -101,13 +126,16 @@ def _run(r: PipelineRun, now: float | None) -> str:
     return f"  {sym} {r.workflow}  {when}{dur}"
 
 
-def detail_text(info: BranchInfo, error: Error | None = None, now: float | None = None) -> str:
+def detail_text(info: BranchInfo, error: Error | None = None, now: float | None = None, cli: str = "gh") -> str:
     """Detail-panel block for one branch."""
     if not info.loaded:
         lines = ["Plattform: noch nicht geladen"]
     else:
         runs = [_run(r, now) for r in info.runs[:5]] or ["  keine Läufe"]
-        lines = [*_pr(info.pr), "", *_item(info.work_item, info.work_item_number), "", "Pipelines:", *runs]
+        lines = [*_pr(info.pr), "", *_item(info.work_item, info.work_item_number), ""]
+        if cli == "gh":  # no status core for Azure DevOps
+            lines += [*_status(info.status, info.work_item_number), ""]
+        lines += ["Pipelines:", *runs]
     if error:
         lines += ["", f"! {hint(error)}"]
     return "\n".join(lines)
