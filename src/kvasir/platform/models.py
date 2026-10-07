@@ -84,6 +84,36 @@ class PipelineRun:
     repo: str | None = None  # "owner/repo", set by the overview (#29)
 
 
+@dataclass(frozen=True)
+class Item:
+    """A GitHub issue as plain facts (REST shape), also used for a blocker."""
+    repo: str  # "owner/repo"
+    number: int
+    title: str
+    state: str  # open | closed
+    state_reason: str | None = None  # completed | not_planned | reopened | None
+    labels: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ItemStatus:
+    """Item + its relations + status derived from facts. Status: done | dropped | blocked | in_review |
+    in_progress | open; a `status:*` label only fills in where no fact exists (source "label")."""
+    item: Item
+    blocked_by: tuple[Item, ...]
+    status: str
+    source: str  # fact | label
+    reason: str | None = None  # why the fact status holds, e.g. "PR #7 ist Draft"
+    hint: str | None = None  # a status:* label that contradicts the fact status
+
+
+@dataclass(frozen=True)
+class IssueStatus:
+    repo: str
+    issue: ItemStatus
+    sub_issues: tuple[ItemStatus, ...]
+
+
 class Provider(Protocol):
     """What the UI needs from a platform. GitHub (gh) and Azure DevOps (az)."""
 

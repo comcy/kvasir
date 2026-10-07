@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from kvasir.platform.models import (
     Error,
     ErrorKind,
+    Item,
     PipelineRun,
     PullRequest,
     Result,
@@ -133,6 +134,15 @@ def parse_run(d: dict) -> PipelineRun:
     )
 
 
+def parse_item(d: dict) -> Item:
+    """REST issue (`gh api repos/o/r/issues/N`, sub_issues, blocked_by entries)."""
+    return Item(
+        repo=d["repository_url"].split("/repos/", 1)[1], number=d["number"], title=d["title"],
+        state=d["state"], state_reason=d.get("state_reason"),
+        labels=tuple(label["name"] for label in d.get("labels") or ()),
+    )
+
+
 def _parsed(res: Result, fn) -> Result:
     if not res.ok:
         return res
@@ -146,9 +156,9 @@ class GitHub:
     def __init__(self, slug: str):
         self.slug = slug
 
-    def pull_requests(self, limit: int = 30) -> Result[list[PullRequest]]:
-        """Open + recently merged/closed PRs (newest first, at most `limit`)."""
-        return _parsed(_json("pr", "list", "-R", self.slug, "--state", "all", "--limit", str(limit),
+    def pull_requests(self, limit: int = 30, state: str = "all") -> Result[list[PullRequest]]:
+        """Open + recently merged/closed PRs (newest first, at most `limit`); `state="open"` only open ones."""
+        return _parsed(_json("pr", "list", "-R", self.slug, "--state", state, "--limit", str(limit),
                              "--json", PR_FIELDS), parse_pr)
 
     def pull_request(self, number: int) -> Result[PullRequest]:
@@ -160,6 +170,30 @@ class GitHub:
             return Result(data=replace(parse_pr(res.data), repo=self.slug))
         except (KeyError, TypeError, AttributeError) as e:
             return Result(error=Error(ErrorKind.OTHER, f"unexpected gh output: {e!r}"))
+
+    def _items(self, path: str):
+        return _parsed(_json("api", f"repos/{self.slug}/{path}?per_page=100"), parse_item)
+
+    def item(self, number: int) -> Result[Item]:
+        res = _json("api", f"repos/{self.slug}/issues/{number}")
+        if not res.ok:
+            return res
+        try:
+            return Result(data=parse_item(res.data))
+        except (KeyError, TypeError, AttributeError, IndexError) as e:
+            return Result(error=Error(ErrorKind.OTHER, f"unexpected gh output: {e!r}"))
+
+    def sub_issues(self, number: int) -> Result[list[Item]]:
+        # ponytail: first 100 only, no pagination
+        return self._items(f"issues/{number}/sub_issues")
+
+    def blocked_by(self, number: int) -> Result[list[Item]]:
+        return self._items(f"issues/{number}/dependencies/blocked_by")
+
+    def branch_names(self) -> Result[list[str]]:
+        # ponytail: --paginate prints one name per line; fine for a few hundred branches
+        res = run_gh("api", f"repos/{self.slug}/branches?per_page=100", "--paginate", "--jq", ".[].name")
+        return Result(data=res.data.split()) if res.ok else res
 
     def work_item(self, number: int) -> Result[WorkItem]:
         """Issue incl. board status. Without read:project: still the issue, board_available=False."""

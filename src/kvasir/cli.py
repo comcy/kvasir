@@ -1,4 +1,5 @@
 """kvasir CLI entry point."""
+import json
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -20,6 +21,8 @@ from kvasir.config import (
     save_repos,
 )
 from kvasir.gitinfo import repo_info
+from kvasir.platform import GitHub, detect_platform
+from kvasir.platform.status import issue_status
 from kvasir.repo_settings import PRESETS, preset_key, update_repo, validate_patterns
 from kvasir.repo_url import normalize
 
@@ -191,3 +194,61 @@ def tui() -> None:
     from kvasir.tui.app import KvasirApp
 
     KvasirApp().run()
+
+
+_LABELS = {"done": "erledigt", "dropped": "verworfen", "blocked": "blockiert", "in_review": "in Review",
+           "in_progress": "in Arbeit", "open": "offen"}
+
+
+def _item_json(s) -> dict:
+    i = s.item
+    return {"number": i.number, "title": i.title, "state": i.state, "state_reason": i.state_reason,
+            "labels": list(i.labels), "status": s.status, "status_source": s.source, "reason": s.reason,
+            "hint": s.hint,
+            "blocked_by": [{"repo": b.repo, "number": b.number, "state": b.state} for b in s.blocked_by]}
+
+
+def _item_text(s, indent: str) -> list[str]:
+    name = _LABELS.get(s.status, s.status) + (" (laut Label)" if s.source == "label" else "")
+    lines = [f"{indent}#{s.item.number} [{name}] {s.item.title}"]
+    if s.blocked_by:
+        lines.append(f"{indent}    blockiert von: " + ", ".join(f"#{b.number} ({b.state})" for b in s.blocked_by))
+    if s.hint:
+        lines.append(f"{indent}    ! {s.hint}")
+    return lines
+
+
+@app.command()
+def status(
+    issue: Annotated[str, typer.Argument(help="Issue number, e.g. #13")],
+    repo: Annotated[str | None, typer.Option(help="owner/repo (default: origin of the current directory)")] = None,
+    format: Annotated[str, typer.Option(help="text | json")] = "text",
+) -> None:
+    """Sub-issues, blockers and status (from facts) of a GitHub issue. Read-only."""
+    if format not in ("text", "json") or not issue.lstrip("#").isdigit():
+        typer.echo("usage: kvasir status #<nr> [--repo owner/repo] [--format text|json]", err=True)
+        raise typer.Exit(2)
+    if repo is None:
+        try:
+            pr = detect_platform(repo_info(Path.cwd()).remote_url or "")
+        except ValueError:
+            pr = None
+        if pr is None or pr.kind != "github":
+            typer.echo("no GitHub repo here; pass --repo owner/repo", err=True)
+            raise typer.Exit(2)
+        repo = pr.slug
+    res = issue_status(GitHub(repo), int(issue.lstrip("#")))
+    if not res.ok:
+        typer.echo(f"{res.error.kind.value}: {res.error.message}", err=True)
+        raise typer.Exit(1)
+    st = res.data
+    if format == "json":
+        typer.echo(json.dumps({"repo": st.repo, "issue": _item_json(st.issue),
+                               "sub_issues": [_item_json(s) for s in st.sub_issues]}, ensure_ascii=False, indent=2))
+        return
+    lines = _item_text(st.issue, "")
+    if st.sub_issues:
+        lines.append("Sub-Issues:")
+        for s in st.sub_issues:
+            lines += _item_text(s, "  ")
+    typer.echo("\n".join(lines))

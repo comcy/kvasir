@@ -1,0 +1,18 @@
+[
+ {
+  "number": 18,
+  "title": "Seite /timeline/ und Link \"Alles ansehen\"",
+  "state": "closed",
+  "state_reason": "completed",
+  "html_url": "https://github.com/comcy/comcy.github.io/issues/18",
+  "repository_url": "https://api.github.com/repos/comcy/comcy.github.io",
+  "labels": [
+   {
+    "name": "enhancement"
+   },
+   {
+    "name": "ready-for-agent"
+   }
+  ]
+ }
+]

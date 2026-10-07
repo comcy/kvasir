@@ -1,0 +1,114 @@
+[
+ {
+  "number": 16,
+  "title": "Timeline mit Beiträgen auf der Startseite",
+  "state": "closed",
+  "state_reason": "completed",
+  "html_url": "https://github.com/comcy/comcy.github.io/issues/16",
+  "repository_url": "https://api.github.com/repos/comcy/comcy.github.io",
+  "labels": [
+   {
+    "name": "enhancement"
+   },
+   {
+    "name": "ready-for-agent"
+   }
+  ]
+ },
+ {
+  "number": 17,
+  "title": "Bookmarks und Seiten als Timeline-Einträge",
+  "state": "closed",
+  "state_reason": "completed",
+  "html_url": "https://github.com/comcy/comcy.github.io/issues/17",
+  "repository_url": "https://api.github.com/repos/comcy/comcy.github.io",
+  "labels": [
+   {
+    "name": "enhancement"
+   },
+   {
+    "name": "ready-for-agent"
+   }
+  ]
+ },
+ {
+  "number": 18,
+  "title": "Seite /timeline/ und Link \"Alles ansehen\"",
+  "state": "closed",
+  "state_reason": "completed",
+  "html_url": "https://github.com/comcy/comcy.github.io/issues/18",
+  "repository_url": "https://api.github.com/repos/comcy/comcy.github.io",
+  "labels": [
+   {
+    "name": "enhancement"
+   },
+   {
+    "name": "ready-for-agent"
+   }
+  ]
+ },
+ {
+  "number": 19,
+  "title": "Timeline lädt beim Scrollen weitere Einträge nach",
+  "state": "closed",
+  "state_reason": "completed",
+  "html_url": "https://github.com/comcy/comcy.github.io/issues/19",
+  "repository_url": "https://api.github.com/repos/comcy/comcy.github.io",
+  "labels": [
+   {
+    "name": "enhancement"
+   },
+   {
+    "name": "ready-for-agent"
+   }
+  ]
+ },
+ {
+  "number": 20,
+  "title": "Timeline: Feinschliff und Abnahme (Themes, Mobil, Zugänglichkeit)",
+  "state": "closed",
+  "state_reason": "completed",
+  "html_url": "https://github.com/comcy/comcy.github.io/issues/20",
+  "repository_url": "https://api.github.com/repos/comcy/comcy.github.io",
+  "labels": [
+   {
+    "name": "enhancement"
+   },
+   {
+    "name": "ready-for-agent"
+   }
+  ]
+ },
+ {
+  "number": 33,
+  "title": "Timeline: Fehler aus dem Code-Review beheben (leere Spalte, Ende gleich Start, Sortierschlüssel)",
+  "state": "closed",
+  "state_reason": "completed",
+  "html_url": "https://github.com/comcy/comcy.github.io/issues/33",
+  "repository_url": "https://api.github.com/repos/comcy/comcy.github.io",
+  "labels": [
+   {
+    "name": "bug"
+   },
+   {
+    "name": "ready-for-agent"
+   }
+  ]
+ },
+ {
+  "number": 34,
+  "title": "Timeline: Pflege aus dem Code-Review (Duplikate, Konstante, Tests, Doku)",
+  "state": "closed",
+  "state_reason": "completed",
+  "html_url": "https://github.com/comcy/comcy.github.io/issues/34",
+  "repository_url": "https://api.github.com/repos/comcy/comcy.github.io",
+  "labels": [
+   {
+    "name": "enhancement"
+   },
+   {
+    "name": "ready-for-agent"
+   }
+  ]
+ }
+]
