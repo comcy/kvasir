@@ -142,6 +142,8 @@ def parse_item(d: dict) -> Item:
         state=d["state"], state_reason=d.get("state_reason"),
         labels=tuple(label["name"] for label in d.get("labels") or ()),
         schedule=schedule.parse(d.get("body"), d.get("milestone")),
+        closed_at=(d.get("closed_at") or "")[:10] or None,
+        parent=int(d["parent_issue_url"].rsplit("/", 1)[1]) if d.get("parent_issue_url") else None,
     )
 
 
@@ -191,6 +193,18 @@ class GitHub:
 
     def blocked_by(self, number: int) -> Result[list[Item]]:
         return self._items(f"issues/{number}/dependencies/blocked_by")
+
+    def issues(self, state: str, milestone: int | None = None) -> Result[list[Item]]:
+        """Repo issues (no PRs), newest update first. # ponytail: first 100 per state, no pagination"""
+        q = f"state={state}&sort=updated&direction=desc&per_page=100" + (f"&milestone={milestone}" if milestone else "")
+        res = _json("api", f"repos/{self.slug}/issues?{q}")
+        return _parsed(Result(data=[d for d in res.data if "pull_request" not in d]) if res.ok else res, parse_item)
+
+    def milestone_number(self, title: str) -> Result[int | None]:
+        res = _json("api", f"repos/{self.slug}/milestones?state=all&per_page=100")
+        if not res.ok:
+            return res
+        return Result(data=next((m["number"] for m in res.data if m.get("title") == title), None))
 
     def branch_names(self) -> Result[list[str]]:
         # ponytail: --paginate prints one name per line; fine for a few hundred branches

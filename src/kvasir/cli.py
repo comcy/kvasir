@@ -21,7 +21,8 @@ from kvasir.config import (
     save_repos,
 )
 from kvasir.gitinfo import repo_info
-from kvasir.platform import PlatformRepo, detect_platform, provider_for
+from kvasir.platform import GitHub, PlatformRepo, detect_platform, provider_for
+from kvasir.platform.graph import WARN_NODES, issue_graph
 from kvasir.platform.status import issue_status
 from kvasir.platform.stepper import check_detector
 from kvasir.repo_settings import PRESETS, preset_key, update_repo, validate_patterns
@@ -348,3 +349,37 @@ def status(
         for s in st.sub_issues:
             lines += _item_text(s, "  ")
     typer.echo("\n".join(lines))
+
+
+@app.command()
+def graph(
+    issue: Annotated[str | None, typer.Argument(help="Limit to one feature, e.g. #13")] = None,
+    repo: Annotated[str | None, typer.Option(help="owner/repo (default: origin of the current directory)")] = None,
+    milestone: Annotated[str | None, typer.Option(help="Limit to a milestone (title)")] = None,
+    format: Annotated[str, typer.Option(help="mermaid")] = "mermaid",
+    out: Annotated[Path | None, typer.Option(help="Write to file instead of stdout")] = None,
+) -> None:
+    """Mermaid graph of open issues (+14 days of closed ones): lanes per feature, blockers, status colours. Read-only."""
+    if format != "mermaid" or (issue is not None and not issue.lstrip("#").isdigit()):
+        typer.echo("usage: kvasir graph [#<nr>] [--milestone <name>] [--repo owner/repo] [--out file]", err=True)
+        raise typer.Exit(2)
+    if repo is None:
+        try:
+            pr = detect_platform(repo_info(Path.cwd()).remote_url or "")
+        except ValueError:
+            pr = None
+        if pr is None or pr.kind != "github":
+            typer.echo("no GitHub repo here; pass --repo owner/repo", err=True)
+            raise typer.Exit(2)
+        repo = pr.slug
+    res = issue_graph(GitHub(repo), int(issue.lstrip("#")) if issue else None, milestone)
+    if not res.ok:
+        typer.echo(f"{res.error.kind.value}: {res.error.message}", err=True)
+        raise typer.Exit(1)
+    text, nodes = res.data
+    if nodes >= WARN_NODES:
+        typer.echo(f"warning: {nodes} nodes; narrow down with #<nr> or --milestone <name>", err=True)
+    if out:
+        out.write_text(text, encoding="utf-8")
+    else:
+        typer.echo(text, nl=False)

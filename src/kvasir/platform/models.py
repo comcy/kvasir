@@ -115,6 +115,8 @@ class Item:
     state_reason: str | None = None  # completed | not_planned | reopened | None
     labels: tuple[str, ...] = ()
     schedule: Schedule = Schedule()
+    closed_at: str | None = None  # ISO date
+    parent: int | None = None  # number of the parent issue (same repo)
 
 
 @dataclass(frozen=True)
