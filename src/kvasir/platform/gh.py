@@ -10,6 +10,7 @@ import subprocess
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
+from kvasir.platform import schedule
 from kvasir.platform.models import (
     Error,
     ErrorKind,
@@ -140,6 +141,7 @@ def parse_item(d: dict) -> Item:
         repo=d["repository_url"].split("/repos/", 1)[1], number=d["number"], title=d["title"],
         state=d["state"], state_reason=d.get("state_reason"),
         labels=tuple(label["name"] for label in d.get("labels") or ()),
+        schedule=schedule.parse(d.get("body"), d.get("milestone")),
     )
 
 

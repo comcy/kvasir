@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from enum import Enum
 from typing import Generic, Protocol, TypeVar
 
@@ -85,6 +86,25 @@ class PipelineRun:
 
 
 @dataclass(frozen=True)
+class Deadline:
+    date: date
+    label: str  # Meilensteinname (z. B. "Sprint 12") oder die Zeile ("Frist: Ende Q4 2026")
+
+
+@dataclass(frozen=True)
+class Schedule:
+    """Termine eines Items. `deadlines` aufsteigend, die erste ist die geltende Frist."""
+    deadlines: tuple[Deadline, ...] = ()
+    planned_from: date | None = None
+    planned_to: date | None = None
+    notes: tuple[str, ...] = ()  # Hinweise zu nicht lesbaren Zeilen
+
+    @property
+    def deadline(self) -> date | None:
+        return self.deadlines[0].date if self.deadlines else None
+
+
+@dataclass(frozen=True)
 class Item:
     """A GitHub issue as plain facts (REST shape), also used for a blocker."""
     repo: str  # "owner/repo"
@@ -93,6 +113,7 @@ class Item:
     state: str  # open | closed
     state_reason: str | None = None  # completed | not_planned | reopened | None
     labels: tuple[str, ...] = ()
+    schedule: Schedule = Schedule()
 
 
 @dataclass(frozen=True)
@@ -105,6 +126,7 @@ class ItemStatus:
     source: str  # fact | label
     reason: str | None = None  # why the fact status holds, e.g. "PR #7 ist Draft"
     hint: str | None = None  # a status:* label that contradicts the fact status
+    notices: tuple[str, ...] = ()  # Termin-Hinweise (unlesbare Zeile, Konflikte); keine Bewertung
 
 
 @dataclass(frozen=True)
