@@ -200,11 +200,27 @@ _LABELS = {"done": "erledigt", "dropped": "verworfen", "blocked": "blockiert", "
            "in_progress": "in Arbeit", "open": "offen"}
 
 
+def _schedule_json(sc) -> dict:
+    iso = lambda d: d.isoformat() if d else None
+    return {"deadline": iso(sc.deadline),
+            "deadlines": [{"date": iso(d.date), "label": d.label} for d in sc.deadlines],
+            "planned_from": iso(sc.planned_from), "planned_to": iso(sc.planned_to)}
+
+
+def _schedule_text(sc, indent: str) -> list[str]:
+    lines = []
+    if sc.deadlines:
+        lines.append(f"{indent}    Frist: " + ", ".join(f"{d.date} ({d.label})" for d in sc.deadlines))
+    if sc.planned_from:
+        lines.append(f"{indent}    Geplant: {sc.planned_from} – {sc.planned_to}")
+    return lines
+
+
 def _item_json(s) -> dict:
     i = s.item
     return {"number": i.number, "title": i.title, "state": i.state, "state_reason": i.state_reason,
             "labels": list(i.labels), "status": s.status, "status_source": s.source, "reason": s.reason,
-            "hint": s.hint,
+            "hint": s.hint, "schedule": _schedule_json(i.schedule), "notices": list(s.notices),
             "blocked_by": [{"repo": b.repo, "number": b.number, "state": b.state} for b in s.blocked_by]}
 
 
@@ -213,8 +229,10 @@ def _item_text(s, indent: str) -> list[str]:
     lines = [f"{indent}#{s.item.number} [{name}] {s.item.title}"]
     if s.blocked_by:
         lines.append(f"{indent}    blockiert von: " + ", ".join(f"#{b.number} ({b.state})" for b in s.blocked_by))
+    lines += _schedule_text(s.item.schedule, indent)
     if s.hint:
         lines.append(f"{indent}    ! {s.hint}")
+    lines += [f"{indent}    ! {n}" for n in s.notices]
     return lines
 
 

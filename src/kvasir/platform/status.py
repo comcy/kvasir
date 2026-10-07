@@ -16,6 +16,20 @@ def _on_branch(number: int, branch: str | None) -> bool:
     return bool(branch) and re.search(rf"(?:^|[/_-]){number}(?:[/_-]|$)", branch) is not None
 
 
+def _notices(item: Item, open_blockers: list[Item]) -> tuple[str, ...]:
+    """Unlesbare Termin-Zeilen und Konflikte. Nur melden, nie bewerten oder korrigieren."""
+    sc = item.schedule
+    out = list(sc.notes)
+    if sc.planned_to and sc.deadline and sc.planned_to > sc.deadline:
+        out.append(f"Geplantes Ende {sc.planned_to} liegt nach Frist {sc.deadline}")
+    if sc.planned_from:
+        for b in open_blockers:
+            end = b.schedule.planned_to or b.schedule.deadline  # ponytail: Ende = geplantes Ende, sonst Frist
+            if end and end > sc.planned_from:
+                out.append(f"Blocker #{b.number} endet {end}, nach Start {sc.planned_from}")
+    return tuple(out)
+
+
 def derive(item: Item, blockers: list[Item], prs: list[PullRequest], branches: list[str]) -> ItemStatus:
     """Order: closed -> blocked -> PR in review -> draft PR / branch -> open. Label only fills a gap or warns."""
     n = item.number
@@ -41,7 +55,7 @@ def derive(item: Item, blockers: list[Item], prs: list[PullRequest], branches: l
         status, source, reason = label.replace("-", "_"), "label", None
     elif label and label.replace("-", "_") != status:
         hint = f"Label sagt {label}, {reason}"
-    return ItemStatus(item, tuple(blockers), status, source, reason, hint)
+    return ItemStatus(item, tuple(blockers), status, source, reason, hint, _notices(item, open_blockers))
 
 
 def issue_status(gh: GitHub, number: int) -> Result[IssueStatus]:

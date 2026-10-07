@@ -36,8 +36,9 @@ class FakeGh:
         return subprocess.CompletedProcess(args, 0, ans.encode(), b"")
 
 
-def issue(n, state="open", reason=None, labels=(), title=None):
-    return {"number": n, "title": title or f"T{n}", "state": state, "state_reason": reason,
+def issue(n, state="open", reason=None, labels=(), title=None, body=None, ms=None):
+    """ms = (Titel, due_on) -> Meilenstein."""
+    return {"body": body, "milestone": {"title": ms[0], "due_on": ms[1]} if ms else None, "number": n, "title": title or f"T{n}", "state": state, "state_reason": reason,
             "html_url": f"https://github.com/o/r/issues/{n}", "repository_url": "https://api.github.com/repos/o/r",
             "labels": [{"name": x} for x in labels]}
 
@@ -103,7 +104,7 @@ def test_json_model_is_stable(real13):
     assert [s["number"] for s in d["sub_issues"]] == [16, 17, 18, 19, 20, 33, 34]
     s20 = d["sub_issues"][4]
     assert list(s20) == ["number", "title", "state", "state_reason", "labels", "status", "status_source", "reason",
-                         "hint", "blocked_by"]
+                         "hint", "schedule", "notices", "blocked_by"]
     assert s20["status"] == "done" and s20["status_source"] == "fact" and s20["hint"] is None
     assert s20["blocked_by"] == [{"repo": "comcy/comcy.github.io", "number": 17, "state": "closed"},
                                  {"repo": "comcy/comcy.github.io", "number": 19, "state": "closed"}]
@@ -225,3 +226,92 @@ def test_repo_from_cwd_origin(monkeypatch, make_repo):
 def test_no_github_repo_needs_repo_option(monkeypatch, make_repo):
     monkeypatch.chdir(make_repo(remote="git@gitlab.com:o/r.git"))
     assert runner.invoke(app, ["status", "#1"]).exit_code == 2
+
+
+# --- Termine: Meilenstein, `Frist:`, `Geplant:` ---
+
+MS = ("Sprint 12", "2026-10-14T00:00:00Z")
+
+
+def plan(monkeypatch, sub, **kw):
+    scenario(monkeypatch, sub, **kw)
+    return sub_of_status()
+
+
+def sub_of_status():
+    return sub(status_of())
+
+
+def test_milestone_due_is_deadline_with_name_as_label(monkeypatch):
+    s = plan(monkeypatch, issue(5, ms=MS))
+    assert s["schedule"]["deadline"] == "2026-10-14"
+    assert s["schedule"]["deadlines"] == [{"date": "2026-10-14", "label": "Sprint 12"}]
+    assert "Frist: 2026-10-14 (Sprint 12)" in runner.invoke(app, ["status", "#1", "--repo", "o/r"]).output
+
+
+@pytest.mark.parametrize("text, date", [
+    ("2026-10-17", "2026-10-17"), ("Ende Q4 2026", "2026-12-31"), ("Ende Q1 2026", "2026-03-31"),
+    ("Ende 2026-02", "2026-02-28"), ("Ende 2028-02", "2028-02-29"), ("Ende 2026", "2026-12-31"),
+])
+def test_frist_line_forms(monkeypatch, text, date):
+    s = plan(monkeypatch, issue(5, body=f"Text\nFrist: {text}\nMehr"))
+    assert s["schedule"]["deadline"] == date and s["notices"] == []
+
+
+@pytest.mark.parametrize("text", ["bald", "Ende Q5 2026", "Ende 2026-13", "2026-02-30", ""])
+def test_unknown_frist_is_a_notice_not_an_abort(monkeypatch, text):
+    s = plan(monkeypatch, issue(5, body=f"Frist: {text}"))
+    assert s["schedule"]["deadline"] is None and len(s["notices"]) == 1 and "Frist" in s["notices"][0]
+
+
+def test_earlier_of_line_and_milestone_wins_and_both_shown(monkeypatch):
+    s = plan(monkeypatch, issue(5, body="Frist: 2026-10-10", ms=MS))
+    assert s["schedule"]["deadline"] == "2026-10-10"
+    assert [d["date"] for d in s["schedule"]["deadlines"]] == ["2026-10-10", "2026-10-14"]
+    s = plan(monkeypatch, issue(5, body="Frist: 2026-10-17", ms=MS))
+    assert s["schedule"]["deadline"] == "2026-10-14"
+    text = runner.invoke(app, ["status", "#1", "--repo", "o/r"]).output
+    assert "Frist: 2026-10-14 (Sprint 12), 2026-10-17 (Frist: 2026-10-17)" in text
+
+
+@pytest.mark.parametrize("sep", [" – ", " - ", "–"])
+def test_geplant_gives_start_and_end(monkeypatch, sep):
+    s = plan(monkeypatch, issue(5, body=f"Geplant: 2026-10-12{sep}2026-10-14"))
+    assert (s["schedule"]["planned_from"], s["schedule"]["planned_to"]) == ("2026-10-12", "2026-10-14")
+    assert s["notices"] == []
+    assert "Geplant: 2026-10-12 – 2026-10-14" in runner.invoke(app, ["status", "#1", "--repo", "o/r"]).output
+
+
+def test_geplant_end_before_start_is_a_notice(monkeypatch):
+    s = plan(monkeypatch, issue(5, body="Geplant: 2026-10-14 – 2026-10-12"))
+    assert len(s["notices"]) == 1 and "vor Start" in s["notices"][0]
+
+
+def test_geplant_unreadable_is_a_notice(monkeypatch):
+    s = plan(monkeypatch, issue(5, body="Geplant: nächste Woche"))
+    assert s["schedule"]["planned_from"] is None and "Geplant nicht verstanden" in s["notices"][0]
+
+
+def test_planned_end_after_deadline_is_a_notice(monkeypatch):
+    s = plan(monkeypatch, issue(5, body="Geplant: 2026-10-12 – 2026-10-20", ms=MS))
+    assert s["notices"] == ["Geplantes Ende 2026-10-20 liegt nach Frist 2026-10-14"]
+    assert s["schedule"]["planned_to"] == "2026-10-20"  # nichts korrigiert
+
+
+def test_blocker_ending_after_start_is_a_notice(monkeypatch):
+    s = plan(monkeypatch, issue(5, body="Geplant: 2026-10-12 – 2026-10-14"),
+             blockers=[issue(9, body="Geplant: 2026-10-08 – 2026-10-13")])
+    assert s["notices"] == ["Blocker #9 endet 2026-10-13, nach Start 2026-10-12"]
+    s = plan(monkeypatch, issue(5, body="Geplant: 2026-10-12 – 2026-10-14"), blockers=[issue(9, ms=MS)])
+    assert s["notices"] == ["Blocker #9 endet 2026-10-14, nach Start 2026-10-12"]  # ohne Plan: Frist
+    s = plan(monkeypatch, issue(5, body="Geplant: 2026-10-12 – 2026-10-14"),
+             blockers=[issue(9, body="Geplant: 2026-10-08 – 2026-10-12")])
+    assert s["notices"] == []
+
+
+def test_items_without_dates_get_none(monkeypatch):
+    s = plan(monkeypatch, issue(5, body="Nur Text, Frist im Satz: morgen", ms=("Backlog", None)))
+    assert s["schedule"] == {"deadline": None, "deadlines": [], "planned_from": None, "planned_to": None}
+    assert s["notices"] == []
+    text = runner.invoke(app, ["status", "#1", "--repo", "o/r"]).output
+    assert "Frist" not in text and "Geplant" not in text
