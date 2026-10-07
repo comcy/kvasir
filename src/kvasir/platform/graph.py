@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
 from kvasir.platform.gh import GitHub
@@ -51,9 +52,31 @@ def _gantt(lanes: list[tuple[str, list[ItemStatus]]]) -> list[str]:
     return ["gantt", "    dateFormat YYYY-MM-DD", *out] if out else []
 
 
+@dataclass(frozen=True)
+class Graph:
+    """Shared model for all output formats."""
+    lanes: list[tuple[str, list[ItemStatus]]]  # (lane title, members); "Ohne Feature" last
+    edges: list[tuple[str, str]]  # (blocker node id, blocked node id), sorted
+    extra: dict[str, tuple[str, str, str, str | None]]  # node id -> (title, sub text, class, url); dimmed / external
+
+    @property
+    def nodes(self) -> int:
+        return sum(len(m) for _, m in self.lanes) + len(self.extra)
+
+
 def issue_graph(gh: GitHub, number: int | None = None, milestone: str | None = None,
-                today: date | None = None) -> Result[tuple[str, int]]:
-    """(markdown with mermaid blocks, node count). `number` = one feature (issue + sub-issues)."""
+                today: date | None = None, fmt: str = "mermaid") -> Result[tuple[str, int]]:
+    """(text, node count). fmt: mermaid (markdown with mermaid blocks) | html. `number` = one feature."""
+    g = collect(gh, number, milestone, today)
+    if not g.ok:
+        return g
+    if fmt == "html":
+        from kvasir.platform.graph_html import render
+        return Result(data=(render(g.data), g.data.nodes))
+    return Result(data=(_mermaid(g.data), g.data.nodes))
+
+
+def collect(gh: GitHub, number: int | None, milestone: str | None, today: date | None) -> Result[Graph]:
     today = today or datetime.now(UTC).date()
     if number is not None:
         root, subs = gh.item(number), gh.sub_issues(number)
@@ -81,8 +104,7 @@ def issue_graph(gh: GitHub, number: int | None = None, milestone: str | None = N
     live = [p for p in prs.data if p.state in ("open", "draft")]
     stats: dict[int, ItemStatus] = {}
     edges: set[tuple[str, str]] = set()
-    extra: dict[str, str] = {}  # node id -> node line (dimmed / external blockers)
-    links: list[str] = []
+    extra: dict[str, tuple[str, str, str, str | None]] = {}  # dimmed / external blockers
     for n in sorted(items):
         it = items[n]
         bl = gh.blocked_by(n)
@@ -95,11 +117,10 @@ def issue_graph(gh: GitHub, number: int | None = None, milestone: str | None = N
             elif it.state == "open":  # old closed items only show up when an open item depends on them
                 if b.repo == gh.slug:
                     bid = f"n{b.number}"
-                    extra[bid] = f'{bid}["#{b.number} {_t(b.title)}<br/>{b.state}"]:::dimmed'
+                    extra[bid] = (f"#{b.number} {b.title}", b.state, "dimmed", f"https://github.com/{b.repo}/issues/{b.number}")
                 else:
                     bid = "ext_" + re.sub(r"\W", "_", b.repo) + f"_{b.number}"
-                    extra[bid] = f'{bid}["{b.repo}#{b.number}<br/>extern"]:::external'
-                    links.append(f'    click {bid} "https://github.com/{b.repo}/issues/{b.number}"')
+                    extra[bid] = (f"{b.repo}#{b.number}", "extern", "external", f"https://github.com/{b.repo}/issues/{b.number}")
                 edges.add((bid, f"n{n}"))
     # lanes: parent issue = feature; an item with sub-issues is its own feature
     parents = {i.parent for i in items.values() if i.parent}
@@ -117,6 +138,11 @@ def issue_graph(gh: GitHub, number: int | None = None, milestone: str | None = N
         (f"#{p} {titles[p]}", [stats[n] for n in sorted(stats) if lane_of[n] == p]) for p in sorted(parents)]
     if loose := [stats[n] for n in sorted(stats) if lane_of[n] is None]:
         lanes.append(("Ohne Feature", loose))
+    return Result(data=Graph(lanes, sorted(edges), extra))
+
+
+def _mermaid(g: Graph) -> str:
+    lanes, extra = g.lanes, g.extra
     flow = ["flowchart LR"]
     for k, (title, members) in enumerate(lanes):
         flow.append(f'    subgraph lane{k}["{_t(title)}"]')
@@ -124,15 +150,14 @@ def issue_graph(gh: GitHub, number: int | None = None, milestone: str | None = N
             line, cls = _node(s)
             flow.append(f"        {line}:::{cls}")
         flow.append("    end")
-    flow += [f"    {line}" for _, line in sorted(extra.items())]
-    flow += [f"    {a} --> {b}" for a, b in sorted(edges)]
-    flow += sorted(links)
+    flow += [f'    {i}["{_t(t)}<br/>{sub}"]:::{cls}' for i, (t, sub, cls, _) in sorted(extra.items())]
+    flow += [f"    {a} --> {b}" for a, b in g.edges]
+    flow += sorted(f'    click {i} "{u}"' for i, (_, _, cls, u) in extra.items() if cls == "external")
     for st, (fill, stroke) in _COLORS.items():
         flow.append(f"    classDef {st} fill:{fill},stroke:{stroke},color:{'#000' if st == 'open' else '#fff'}")
     flow.append("    classDef dimmed fill:#f6f8fa,stroke:#d0d7de,color:#8c959f,stroke-dasharray:3 3")
     flow.append("    classDef external fill:#d0d7de,stroke:#8c959f,color:#24292f")
     blocks = [flow]
-    if g := _gantt(lanes):
-        blocks.append(g)
-    text = "\n\n".join("```mermaid\n" + "\n".join(b) + "\n```" for b in blocks) + "\n"
-    return Result(data=(text, len(stats) + len(extra)))
+    if gantt := _gantt(lanes):
+        blocks.append(gantt)
+    return "\n\n".join("```mermaid\n" + "\n".join(b) + "\n```" for b in blocks) + "\n"

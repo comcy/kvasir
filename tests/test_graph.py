@@ -1,6 +1,7 @@
 """`kvasir graph` von außen: CLI-Aufruf, `gh`-Antworten gefaked, Ausgabe gegen erwartete Mermaid-Texte."""
 import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from test_status import FakeGh, issue, pr
@@ -149,3 +150,49 @@ def test_gh_error_and_bad_arguments(monkeypatch):
 def test_titles_are_escaped(monkeypatch, title):
     out = graph(monkeypatch, routes([iss(1, title=title)]))[0].output
     assert '"' not in out.split('n1["')[1].split('"]')[0] and "<b>" not in out
+
+
+# --- HTML (#55) ---
+REF = Path(__file__).parent / "fixtures" / "graph_reference.html"
+
+
+def html_routes():
+    ext = issue(3)
+    ext["repository_url"] = "https://api.github.com/repos/x/y"
+    return routes(
+        [iss(2, 1, title="B", body="Geplant: 2026-10-12 – 2026-10-14", ms=("Sprint 12", "2026-10-20T00:00:00Z")),
+         iss(1, title="Feat"), iss(3, title="Solo", labels=["status:in-review"]), iss(4, 1, title="Blocked <x>")],
+        [iss(5, 1, closed=3, title="Done")], blocked={4: [iss(2)], 2: [iss(5, closed=3)], 3: [ext]},
+        prs=[pr(7, "feat/2-x", draft=True), pr(8, "b", draft=True, closes=[3])])
+
+
+def test_html_matches_reference_and_is_deterministic(monkeypatch):
+    out = graph(monkeypatch, html_routes(), "--format", "html")[0].output
+    assert graph(monkeypatch, html_routes(), "--format", "html")[0].output == out
+    if not REF.exists():  # Referenz bewusst neu erzeugen: Datei löschen, Test laufen lassen, im Browser prüfen
+        REF.parent.mkdir(exist_ok=True)
+        REF.write_text(out, encoding="utf-8")
+    assert out == REF.read_text(encoding="utf-8")
+
+
+def test_html_is_standalone_with_lanes_links_edges_hints_and_timeline(monkeypatch):
+    out = graph(monkeypatch, html_routes(), "--format", "html")[0].output
+    assert out.startswith("<!doctype html>") and "prefers-color-scheme:dark" in out
+    assert "http://" not in out.replace("https://github.com", "") and "<script" not in out and "src=" not in out
+    for lane in ("#1 Feat", "Ohne Feature", "Extern / älter"):
+        assert lane in out
+    assert '<a href="https://github.com/o/r/issues/2">' in out and "https://github.com/x/y/issues/3" in out
+    assert out.count('class="edge"') == 3  # 5->2, 2->4, ext->3
+    assert "Blocked &lt;x&gt;" in out and "<x>" not in out
+    assert "⚠ Label widerspricht" in out  # Label-Widerspruch am Knoten (#3)
+    assert "<h2>Zeitachse</h2>" in out and "Frist 2026-10-20: Sprint 12" in out and "2026-10-12 – 2026-10-14" in out
+
+
+def test_html_without_dates_has_no_timeline_and_no_nodes_still_renders(monkeypatch):
+    assert "Zeitachse" not in graph(monkeypatch, routes([iss(1)]), "--format", "html")[0].output
+    assert "<svg" in graph(monkeypatch, routes([]), "--format", "html")[0].output
+
+
+def test_html_40_nodes_fit_one_viewbox_and_warn(monkeypatch):
+    res, _ = graph(monkeypatch, routes([iss(n) for n in range(1, 41)]), "--format", "html")
+    assert "warning: 40 nodes" in res.output and 'width:100%' in res.output and "viewBox" in res.output

@@ -356,11 +356,11 @@ def graph(
     issue: Annotated[str | None, typer.Argument(help="Limit to one feature, e.g. #13")] = None,
     repo: Annotated[str | None, typer.Option(help="owner/repo (default: origin of the current directory)")] = None,
     milestone: Annotated[str | None, typer.Option(help="Limit to a milestone (title)")] = None,
-    format: Annotated[str, typer.Option(help="mermaid")] = "mermaid",
+    format: Annotated[str, typer.Option(help="mermaid | html")] = "mermaid",
     out: Annotated[Path | None, typer.Option(help="Write to file instead of stdout")] = None,
 ) -> None:
-    """Mermaid graph of open issues (+14 days of closed ones): lanes per feature, blockers, status colours. Read-only."""
-    if format != "mermaid" or (issue is not None and not issue.lstrip("#").isdigit()):
+    """Mermaid or standalone HTML graph of open issues (+14 days of closed ones): lanes per feature, blockers, status colours. Read-only."""
+    if format not in ("mermaid", "html") or (issue is not None and not issue.lstrip("#").isdigit()):
         typer.echo("usage: kvasir graph [#<nr>] [--milestone <name>] [--repo owner/repo] [--out file]", err=True)
         raise typer.Exit(2)
     if repo is None:
@@ -372,7 +372,7 @@ def graph(
             typer.echo("no GitHub repo here; pass --repo owner/repo", err=True)
             raise typer.Exit(2)
         repo = pr.slug
-    res = issue_graph(GitHub(repo), int(issue.lstrip("#")) if issue else None, milestone)
+    res = issue_graph(GitHub(repo), int(issue.lstrip("#")) if issue else None, milestone, fmt=format)
     if not res.ok:
         typer.echo(f"{res.error.kind.value}: {res.error.message}", err=True)
         raise typer.Exit(1)
