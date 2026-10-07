@@ -1,5 +1,7 @@
 """kvasir.toml / workflow/phases.tsv von außen: status, init, doctor, setup. Wegwerf-Repos, kein Netz."""
 import json
+import shutil
+from pathlib import Path
 
 import pytest
 from test_doctor import AUTH_OK, Env
@@ -15,7 +17,7 @@ TSV = ("# Kommentar\nid\tname\ttool\tdone_when\tlevel\tenabled\n"
        "0\tEingang\t-\tissue_exists\trequired\t\n"
        "1\tGeschlossen\t-\tissue_closed\trequired\t\n"
        "2\tAus\t-\tissue_exists\trequired\tno\n"
-       "3\tUnbekannt\t-\thas_label_kind:triage\trequired\t\n"
+       "3\tUnbekannt\t-\tbogus_detector\trequired\t\n"
        "4\tManuell\t-\t-\trequired\t\n")
 
 
@@ -183,7 +185,7 @@ def test_doctor_reports_unknown_detector_and_missing_fields(repo, doc):
 def test_doctor_checks_tsv(repo, doc):
     write(repo, "workflow/phases.tsv", TSV)
     r = doctor_out(repo)
-    assert "unknown detector has_label_kind" in r.output and r.exit_code == 1
+    assert "unknown detector bogus_detector" in r.output and r.exit_code == 1
 
 
 def test_doctor_broken_toml(repo, doc):
@@ -203,3 +205,43 @@ def test_doctor_ok_and_silent_without_files(repo, doc):
     assert "repo files" not in doctor_out(repo).output
     write(repo, "kvasir.toml", '[branches]\npatterns = ["{type}/{slug}"]\n[[phases]]\nname = "A"\ndone_when = ["issue_exists"]\n')
     assert "repo files ok" in doctor_out(repo).output
+
+
+# --- Vokabular aus workflow/detectors.tsv (#64): echte Dateien des Blog-Repos als Fixture
+
+WF = Path(__file__).parent / "fixtures" / "workflow"
+
+
+def blog_files(repo):
+    shutil.copytree(WF, repo / "workflow")
+
+
+def test_blog_phases_show_up_in_status(repo, monkeypatch):
+    blog_files(repo)
+    (repo / "openspec").mkdir()
+    (repo / "openspec/config.yaml").write_text("x")
+    monkeypatch.setattr("kvasir.platform.stepper._openspec", lambda: (False, False))  # kein Change, keiner archiviert
+    got = steps(feature_status(monkeypatch))
+    names = [n for n, _ in got]
+    assert names[:2] == ["Setup (einmalig je Klon)", "Eingang"] and "Bauen und prüfen" in names
+    assert "Wissen sichern" not in names  # done_when "-" = nicht erkennbar
+    assert got[0] == ("Setup (einmalig je Klon)", "done")
+    assert got[1] == ("Eingang", "current")  # kein Triage-Label am Issue
+
+
+def test_blog_vocabulary_is_clean_in_doctor(repo, doc):
+    blog_files(repo)
+    r = doctor_out(repo)
+    assert "repo files ok" in r.output and r.exit_code == 0, r.output
+
+
+def test_doctor_uses_repo_vocabulary(repo, doc):
+    blog_files(repo)
+    # nur issue_open im Vokabular: label ist dort unbekannt, auch wenn kvasir es kennt
+    write(repo, "workflow/detectors.tsv", "name\targ\tdescription\nissue_open\t-\td\nneu_ding\t-\td\n")
+    write(repo, "workflow/phases.tsv",
+          "id\tname\tdone_when\n0\tA\tlabel:x\n1\tB\tneu_ding\n2\tC\tissue_open:x\n")
+    out = doctor_out(repo).output
+    assert "unknown detector label" in out
+    assert "detector neu_ding is not evaluated by kvasir" in out
+    assert "detector issue_open takes no argument" in out

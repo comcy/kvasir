@@ -12,10 +12,11 @@ from pathlib import Path
 
 from kvasir.branch_names import compile_pattern
 from kvasir.config import DEFAULT_PATTERNS, RepoConfig, load_local, load_repos
-from kvasir.platform.stepper import PHASES, Phases, check_detector
+from kvasir.platform.stepper import DETECTORS, PHASES, Phases, Vocabulary, check_detector
 
 FILE = "kvasir.toml"
 PHASES_TSV = Path("workflow") / "phases.tsv"
+DETECTORS_TSV = Path("workflow") / "detectors.tsv"
 
 
 def checkout_root(cwd: Path) -> Path:
@@ -35,13 +36,29 @@ def load(root: Path) -> dict:
         raise ValueError(f"{FILE}: {e}") from e
 
 
-def _tsv(root: Path) -> list[dict[str, str]]:
-    """Rows of workflow/phases.tsv as dicts (Kopfzeile = Spaltennamen), `enabled: no` dropped."""
-    p = root / PHASES_TSV
+def _tsv(root: Path, rel: Path = PHASES_TSV) -> list[dict[str, str]]:
+    """Rows of a workflow TSV as dicts (Kopfzeile = Spaltennamen), `enabled: no` dropped."""
+    p = root / rel
     lines = [x for x in p.read_text(encoding="utf-8").splitlines() if x.strip() and not x.startswith("#")]
     head = lines[0].split("\t") if lines else []
     rows = [dict(zip(head, (c.strip() for c in x.split("\t")), strict=False)) for x in lines[1:]]
     return [r for r in rows if r.get("enabled", "yes").lower() != "no"]
+
+
+def vocabulary(root: Path) -> Vocabulary | None:
+    """Detector vocabulary of workflow/detectors.tsv (name -> '-', 'text', 'path' or allowed values);
+    None when the repo has no such file. Raises ValueError when unreadable."""
+    if not (root / DETECTORS_TSV).exists():
+        return None
+    try:
+        rows = _tsv(root, DETECTORS_TSV)
+    except OSError as e:
+        raise ValueError(f"{DETECTORS_TSV}: {e}") from e
+    out: Vocabulary = {}
+    for r in rows:
+        arg = r.get("arg", "-")
+        out[r.get("name", "")] = tuple(arg[5:].split("|")) if arg.startswith("enum:") else arg
+    return out
 
 
 def _specs(done_when) -> tuple[str, ...]:
@@ -87,6 +104,10 @@ def problems(root: Path) -> list[str]:
         data = load(root)
     except ValueError as e:
         return [str(e)]
+    try:
+        vocab = vocabulary(root)
+    except ValueError as e:
+        return [str(e)]
     if found:
         src, rows = found
         for i, (name, done_when) in enumerate(rows, 1):
@@ -96,7 +117,11 @@ def problems(root: Path) -> list[str]:
             if done_when is None or not isinstance(done_when, (str, list)):
                 out.append(f"{label}: required field done_when missing")
                 continue
-            out += [f"{label}: {e}" for s in _specs(done_when) if (e := check_detector(s))]
+            for s in _specs(done_when):
+                if e := check_detector(s, vocab):
+                    out.append(f"{label}: {e}")
+                elif s.partition(":")[0] not in DETECTORS:  # in the repo vocabulary, but kvasir has no rule for it
+                    out.append(f"{label}: detector {s.partition(':')[0]} is not evaluated by kvasir (shown as unknown)")
     for p in _branch_patterns(data):
         try:
             compile_pattern(p)

@@ -1,0 +1,19 @@
+# Das feste Vokabular der Bedingungen (guard in transitions.tsv, done_when in phases.tsv).
+# arg: - (kein Argument), text, path oder enum:a|b|c. Aufruf als name oder name:argument, mehrere mit Komma (UND).
+# Die Dateien enthalten nur Namen, ausgewertet wird im Werkzeug, nie Code aus diesen Dateien.
+name	arg	description
+issue_exists	-	Das Issue existiert
+issue_open	-	Das Issue ist offen
+issue_closed	-	Das Issue ist geschlossen
+label	text	Das Label mit diesem Namen ist gesetzt
+has_label_kind	enum:triage|status	Es ist ein Label dieser Art gesetzt (Dimension aus states.tsv)
+no_open_blockers	-	Kein offener Blocker (blocked_by)
+subissues_exist	-	Es gibt Sub-Issues
+subissues_closed	-	Alle Sub-Issues sind geschlossen
+pr_state	enum:draft|ready|merged	Zustand des verknüpften Pull Requests
+checks	enum:success|failure	Ergebnis der Checks des Pull Requests
+pr_checklist	text	Das Kästchen mit diesem Text in der PR-Beschreibung ist abgehakt
+openspec_change_exists	-	Es gibt einen aktiven OpenSpec-Change zum Issue
+openspec_artifacts_complete	-	Alle Artefakte des Changes sind vorhanden (openspec status)
+openspec_archived	-	Der Change ist archiviert
+file_exists	path	Die Datei existiert im Repo

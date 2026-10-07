@@ -1,0 +1,14 @@
+# Zustände des Prozesses. id = Name des Labels (bei triage und status), kind = Dimension.
+# kind: triage (Rolle laut /triage), status (Fluss laut docs/agents/flow-labels.md), terminal (kein Label).
+# enabled (optional): no schaltet einen Zustand ab, ohne ihn zu löschen.
+id	kind	color	description
+needs-triage	triage	fbca04	Maintainer needs to evaluate
+needs-info	triage	d876e3	Waiting on reporter for more information
+ready-for-agent	triage	0e8a16	Fully specified, ready for an AFK agent
+ready-for-human	triage	1d76db	Requires human implementation
+wontfix	triage	ffffff	This will not be worked on
+status:ready-for-refinement	status	c5def5	Flow: triaged, needs refinement
+status:in-refinement	status	8fb5e8	Flow: grilling and change proposal in progress
+status:in-progress	status	fef2c0	Flow: branch and PR open
+status:in-review	status	f9d0c4	Flow: PR ready, review running
+closed	terminal	-	Issue closed (no label)
