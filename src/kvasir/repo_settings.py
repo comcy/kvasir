@@ -38,6 +38,7 @@ def update_repo(
     cfg = repos[url]
     if patterns is not None:
         cfg.branch_patterns = validate_patterns(patterns)
+        cfg.patterns_set = True
     for name, value in (("fetch_interval", fetch_interval), ("platform_interval", platform_interval)):
         if value is not None:
             if value < 1:

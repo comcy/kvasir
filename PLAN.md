@@ -15,7 +15,7 @@ Terminal-Tool für **Git-Worktrees**: Überblick über mehrere Repos, schnelles 
 | Registrierung | Manuell per `kvasir setup`; nur registrierte Repos erscheinen. Schlüssel = normalisierte Remote-URL. |
 | `setup`-Modi | (1) `setup <url>`: Bare-Klon im Layout + registrieren. (2) in Bare-Layout-Repo: registrieren. (3) in normalem Clone: registrieren (nur Überblick). |
 | Normaler Clone | Variante A: Überblick, Fetch, Pull. Keine zusätzlichen Worktrees; `setup --convert` später. |
-| Konfiguration | Zwei Dateien: synchronisierbar (pro URL: Branch-Vorlagen, Fetch-Intervall), lokal (Pfad je Repo, `open_command`). |
+| Konfiguration | Zwei Dateien: synchronisierbar (pro URL: Branch-Vorlagen, Fetch-Intervall), lokal (Pfad je Repo, `open_command`). Dritte Ebene **im Repo geteilt** (#53): `kvasir.toml` + `workflow/phases.tsv`; Vorrang lokal > Repo > Standard. |
 | Branch-Vorlagen | Pro Repo, mit `{type}`, `{id}` (`1234` oder `ABC-123`), `{slug}`, `{date}`. Default Conventional Commits. Verstoß = Warnung. |
 | Wechseln | `Enter` öffnet neues Terminal im Worktree via `open_command` (`{path}`). Default Windows `wt.exe -d {path}`, macOS/Linux `kitty --directory {path}`. Kein `cd`-Wrapper. |
 | Anzeige Worktree | Branch, Alter, Betreff, „zuletzt aktiv“, Zähler staged/unstaged/untracked, Notiz. |

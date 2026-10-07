@@ -15,8 +15,9 @@ from pathlib import Path
 
 from kvasir.platform.models import Item, PullRequest, Step, Stepper
 
-# ponytail: built-in only; workflow/*.tsv of the target repo is not read yet
-PHASES = (
+Phases = tuple[tuple[str, tuple[str, ...]], ...]  # (name, done_when detectors, AND)
+# Built-in standard; a repo overrides it via kvasir.toml / workflow/phases.tsv (see kvasir.repo_file)
+PHASES: Phases = (
     ("Setup", ("file_exists:AGENTS.md",)),
     ("Eingang", ("issue_exists",)),
     ("Idee schärfen", ("label:ready-for-agent",)),
@@ -27,6 +28,12 @@ PHASES = (
     ("Abschließen", ("pr_state:merged", "issue_closed")),
     ("Wissen sichern", ("file_exists:docs/adr",)),
 )
+# Fixed detector vocabulary: name -> argument kind ("-" none, "text", "path" or tuple of allowed values)
+DETECTORS: dict[str, str | tuple[str, ...]] = {
+    "issue_exists": "-", "label": "text", "subissues_exist": "-", "issue_closed": "-", "file_exists": "path",
+    "openspec_change_exists": "-", "openspec_artifacts_complete": "-",
+    "pr_state": ("draft", "ready", "merged"), "checks": ("success", "failure"),
+}
 _BOX = re.compile(r"^\s*[-*]\s*\[( |x|X)\]\s*(.*)$", re.MULTILINE)
 
 
@@ -55,6 +62,21 @@ def _openspec() -> tuple[bool, bool] | None:
     if any(not isinstance(d, dict) for d in done):
         return None
     return bool(names), bool(names) and all(d.get("isComplete") for d in done)
+
+
+def check_detector(spec: str) -> str | None:
+    """Error text when `spec` ("name" or "name:arg") is not in the vocabulary, else None."""
+    name, _, arg = spec.partition(":")
+    kind = DETECTORS.get(name)
+    if kind is None:
+        return f"unknown detector {name}"
+    if kind == "-":
+        return f"detector {name} takes no argument" if arg else None
+    if not arg:
+        return f"detector {name} needs an argument"
+    if isinstance(kind, tuple) and arg not in kind:
+        return f"detector {name}: {arg} is not one of {'|'.join(kind)}"
+    return None
 
 
 def detect(spec: str, f: Facts) -> bool | None:
@@ -88,11 +110,12 @@ def _mark(steps: list[tuple[str, bool]]) -> tuple[Step, ...]:
     return tuple(Step(n, "done" if i < cur else "current" if i == cur else "open") for i, (n, _) in enumerate(steps))
 
 
-def feature_stepper(f: Facts, previous: tuple[int, ...] = ()) -> Stepper:
+def feature_stepper(f: Facts, previous: tuple[int, ...] = (), phases: Phases = PHASES) -> Stepper:
     steps = []
-    for name, specs in PHASES:
-        res = [detect(s, f) for s in specs]
-        if None not in res:
+    for name, specs in phases:
+        # unknown detector (typo in a repo file) = unknown, never an exception; no detector = not observable
+        res = [detect(s, f) if check_detector(s) is None else None for s in specs]
+        if specs and None not in res:
             steps.append((name, all(res)))
     return Stepper("feature", _mark(steps), previous)
 

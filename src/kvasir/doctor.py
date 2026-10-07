@@ -14,6 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from kvasir import repo_file
 from kvasir.config import load_local, load_repos
 from kvasir.platform.detect import detect_platform
 
@@ -219,6 +220,19 @@ def check_platform(url: str, system: str | None = None) -> list[Check]:
     return [Check("fail", f"{url}: {repo.kind}, {cli.name} missing", hint, missing=cli)]
 
 
+def check_repo_files(url: str, root: Path, cfg) -> list[Check]:
+    """kvasir.toml / workflow/phases.tsv of a registered repo, and conflicts with the local override."""
+    if not (root / repo_file.FILE).exists() and not (root / repo_file.PHASES_TSV).exists():
+        return []
+    probs = repo_file.problems(root)
+    out = [Check("fail", f"{url}: {p}", f"fix it in {root}") for p in probs]
+    shared = repo_file.repo_patterns(root)
+    if cfg is not None and cfg.patterns_set and shared and shared != cfg.branch_patterns:
+        out.append(Check("warn", f"{url}: repos.toml branch_patterns override {repo_file.FILE} [branches]",
+                         "local wins; `kvasir setup --reconfigure` to change"))
+    return out or [Check("ok", f"{url}: repo files ok")]
+
+
 def all_checks(system: str | None = None) -> list[Check]:
     out = [check_git(), *check_cli(CLIS["github"], system)]
     cfg, repos, local = check_config()
@@ -229,6 +243,8 @@ def all_checks(system: str | None = None) -> list[Check]:
         path = local.paths.get(url) if local else None
         if path and not Path(path).exists():
             out.append(Check("warn", f"{url}: local path missing ({path})", "kvasir setup <path>"))
+        elif path:
+            out += check_repo_files(url, Path(path), repos[url])
         out += check_platform(url, system)
     return out
 

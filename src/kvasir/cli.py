@@ -6,7 +6,7 @@ from typing import Annotated
 
 import typer
 
-from kvasir import __version__
+from kvasir import __version__, repo_file
 from kvasir import doctor as doctor_mod
 from kvasir.clone import clone_bare
 from kvasir.config import (
@@ -23,6 +23,7 @@ from kvasir.config import (
 from kvasir.gitinfo import repo_info
 from kvasir.platform import PlatformRepo, detect_platform, provider_for
 from kvasir.platform.status import issue_status
+from kvasir.platform.stepper import check_detector
 from kvasir.repo_settings import PRESETS, preset_key, update_repo, validate_patterns
 from kvasir.repo_url import normalize
 
@@ -138,14 +139,20 @@ def setup(
         _reconfigure(url, known, pattern, fetch_interval, platform_interval)
         return
     local = load_local()
+    shared = not known and not pattern and repo_file.repo_patterns(info.root)
+    if shared:  # kvasir.toml decides until the user sets a local override
+        cfg.patterns_set = False
+        typer.echo(f"Branch templates from {repo_file.FILE}: {', '.join(shared)}")
     if not known and not pattern and fetch_interval is None and _interactive():
-        cfg.branch_patterns = _ask_patterns()
+        if not shared:
+            cfg.branch_patterns = _ask_patterns()
         cfg.fetch_interval = typer.prompt("Fetch interval (minutes)", type=int, default=cfg.fetch_interval)
         if local.open_command is None:
             local.open_command = typer.prompt("Open command", default=default_open_command())
     if pattern:
         try:
             cfg.branch_patterns = validate_patterns(pattern)
+            cfg.patterns_set = True
         except ValueError as e:
             typer.echo(str(e), err=True)
             raise typer.Exit(1) from e
@@ -173,6 +180,64 @@ def _confirm(question: str) -> bool:
 def doctor() -> None:
     """Check prerequisites (git, gh, login, config) and offer to install a missing CLI."""
     raise typer.Exit(doctor_mod.report(doctor_mod.all_checks, _interactive(), _confirm, typer.echo))
+
+
+def _ask_phases(current) -> list:
+    """Per phase: keep, change done_when, or drop. Only known detectors are accepted."""
+    out = []
+    for name, specs in current:
+        while True:
+            ans = typer.prompt(f"{name}: done_when (Komma = UND, '-' = nicht erkennbar, 'skip' = Phase streichen)",
+                               default=", ".join(specs) or "-").strip()
+            if ans == "skip":
+                break
+            new = tuple(x.strip() for x in ans.split(",") if x.strip() not in ("", "-"))
+            if errs := [e for x in new if (e := check_detector(x))]:
+                typer.echo("; ".join(errs), err=True)
+                continue
+            out.append((name, new))
+            break
+    return out
+
+
+@app.command()
+def init(
+    pattern: Annotated[list[str] | None, typer.Option("--pattern", "-p", help="Branch template, repeatable")] = None,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Write without asking (the diff is still printed)")] = False,
+) -> None:
+    """Create or update kvasir.toml in the repo root: shows the diff first, never overwrites silently."""
+    import difflib
+    root = repo_file.checkout_root(Path.cwd())
+    try:
+        old_data = repo_file.load(root)
+    except ValueError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+    cur = repo_file.repo_patterns(root)
+    try:
+        patterns = validate_patterns(pattern) if pattern else _ask_patterns(cur) if _interactive() else cur
+    except ValueError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+    phases = None
+    if _interactive() and not typer.confirm("Standardprozess übernehmen (Phasen aus workflow/phases.tsv bzw. eingebaut)?",
+                                            default=True):
+        phases = _ask_phases(repo_file.load_phases(root))
+    elif "phases" in old_data and not _interactive():
+        phases = repo_file.load_phases(root)  # keep existing overrides when not asking
+    target = root / repo_file.FILE
+    old = target.read_text(encoding="utf-8") if target.exists() else ""
+    new = repo_file.render(patterns, phases)
+    if new == old:
+        typer.echo(f"{repo_file.FILE} unchanged")
+        return
+    typer.echo("".join(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
+                                            f"a/{repo_file.FILE}", f"b/{repo_file.FILE}")), nl=False)
+    if not (yes or (_interactive() and typer.confirm(f"Write {target}?", default=False))):
+        typer.echo("not written (use --yes to write)", err=True)
+        raise typer.Exit(1)
+    target.write_text(new, encoding="utf-8")
+    typer.echo(f"Wrote {target}")
 
 
 @app.command()
@@ -267,7 +332,8 @@ def status(
             raise typer.Exit(2)
     else:
         pr = PlatformRepo("github", repo)
-    res = issue_status(provider_for(pr), int(issue.lstrip("#")))
+    phases = repo_file.load_phases(repo_file.checkout_root(Path.cwd()))
+    res = issue_status(provider_for(pr), int(issue.lstrip("#")), phases)
     if not res.ok:
         typer.echo(f"{res.error.kind.value}: {res.error.message}", err=True)
         raise typer.Exit(1)
