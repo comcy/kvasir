@@ -21,7 +21,7 @@ from kvasir.config import (
     save_repos,
 )
 from kvasir.gitinfo import repo_info
-from kvasir.platform import GitHub, detect_platform
+from kvasir.platform import PlatformRepo, detect_platform, provider_for
 from kvasir.platform.status import issue_status
 from kvasir.repo_settings import PRESETS, preset_key, update_repo, validate_patterns
 from kvasir.repo_url import normalize
@@ -253,7 +253,7 @@ def status(
     repo: Annotated[str | None, typer.Option(help="owner/repo (default: origin of the current directory)")] = None,
     format: Annotated[str, typer.Option(help="text | json")] = "text",
 ) -> None:
-    """Sub-issues, blockers and status (from facts) of a GitHub issue. Read-only."""
+    """Sub-issues, blockers and status (from facts) of a GitHub issue or Azure DevOps work item. Read-only."""
     if format not in ("text", "json") or not issue.lstrip("#").isdigit():
         typer.echo("usage: kvasir status #<nr> [--repo owner/repo] [--format text|json]", err=True)
         raise typer.Exit(2)
@@ -262,11 +262,12 @@ def status(
             pr = detect_platform(repo_info(Path.cwd()).remote_url or "")
         except ValueError:
             pr = None
-        if pr is None or pr.kind != "github":
-            typer.echo("no GitHub repo here; pass --repo owner/repo", err=True)
+        if pr is None:
+            typer.echo("no GitHub/Azure DevOps repo here; pass --repo owner/repo", err=True)
             raise typer.Exit(2)
-        repo = pr.slug
-    res = issue_status(GitHub(repo), int(issue.lstrip("#")))
+    else:
+        pr = PlatformRepo("github", repo)
+    res = issue_status(provider_for(pr), int(issue.lstrip("#")))
     if not res.ok:
         typer.echo(f"{res.error.kind.value}: {res.error.message}", err=True)
         raise typer.Exit(1)

@@ -14,13 +14,17 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from urllib.parse import quote
 
+from kvasir.platform import schedule
 from kvasir.platform.models import (
+    Deadline,
     Error,
     ErrorKind,
+    Item,
     PipelineRun,
     PlatformRepo,
     PullRequest,
     Result,
+    Schedule,
     WorkItem,
 )
 
@@ -124,7 +128,9 @@ class Azure:
     def __init__(self, org: str, project: str, repo: str):
         self.org, self.project, self.repo = org, project, repo
         self.org_url = f"https://dev.azure.com/{org}"
+        self.slug = f"{org}/{project}/{repo}".lower()
         self._who: str | None = None
+        self._raw: dict[int, dict] = {}  # work items incl. relations, one `az` call each
 
     @classmethod
     def for_repo(cls, r: PlatformRepo) -> Azure:
@@ -204,8 +210,8 @@ class Azure:
         return replace(pr, checks=checks_of(pol.data) if pol.ok and isinstance(pol.data, list) else None,
                        closing_issues=tuple(ids))
 
-    def pull_requests(self, limit: int = 30) -> Result[list[PullRequest]]:
-        """Open + recently completed/abandoned PRs of this repo (newest first, at most `limit`)."""
+    def pull_requests(self, limit: int = 30, state: str = "all") -> Result[list[PullRequest]]:
+        """Open + recently completed/abandoned PRs of this repo (newest first, at most `limit`). `state` is ignored."""
         res = self._prs("--project", self.project, "--repository", self.repo, "--status", "all",
                         "--top", str(limit))
         if not res.ok:
@@ -234,6 +240,74 @@ class Azure:
         try:
             return Result(data=self.parse_work_item(res.data))
         except (KeyError, TypeError, AttributeError, ValueError) as e:
+            return _unexpected(e)
+
+    # -- status (#56): work item relations as sub-issues / blocked_by, read-only --
+
+    def _show(self, number: int) -> Result[dict]:
+        if number not in self._raw:
+            res = _json("boards", "work-item", "show", "--id", str(number), "--expand", "relations",
+                        "--organization", self.org_url)
+            if not res.ok:
+                return res
+            self._raw[number] = res.data
+        return Result(data=self._raw[number])
+
+    def parse_item(self, d: dict) -> Item:
+        f = d.get("fields") or {}
+        state = (f.get("System.State") or "").lower()
+        dates = [schedule._iso((f.get(k) or "")[:10]) for k in
+                 ("Microsoft.VSTS.Scheduling.DueDate", "Microsoft.VSTS.Scheduling.StartDate",
+                  "Microsoft.VSTS.Scheduling.TargetDate")]
+        due, von, bis = dates
+        it = (f.get("System.IterationPath") or "").replace("\\", "/").rsplit("/", 1)[-1]
+        notes = (f"Geplant: Ende {bis} liegt vor Start {von}",) if von and bis and bis < von else ()
+        return Item(
+            repo=self.slug, number=int(d["id"]), title=f["System.Title"],
+            state="closed" if state in _CLOSED else "open",
+            state_reason=None if state not in _CLOSED else "not_planned" if state == "removed" else "completed",
+            labels=tuple(t.strip() for t in (f.get("System.Tags") or "").split(";") if t.strip()),
+            schedule=Schedule((Deadline(due, it or "Fällig"),) if due else (), von, bis, notes),
+        )
+
+    def item(self, number: int) -> Result[Item]:
+        res = self._show(number)
+        if not res.ok:
+            return res
+        try:
+            return Result(data=self.parse_item(res.data))
+        except (KeyError, TypeError, AttributeError, ValueError) as e:
+            return _unexpected(e)
+
+    def _related(self, number: int, rel: str) -> Result[list[Item]]:
+        """Items behind relations of type `rel`: Hierarchy-Forward = child, Dependency-Reverse = predecessor."""
+        res = self._show(number)
+        if not res.ok:
+            return res
+        out = []
+        try:
+            for r in res.data.get("relations") or ():
+                if r.get("rel") == f"System.LinkTypes.{rel}":
+                    got = self.item(int(r["url"].rstrip("/").rsplit("/", 1)[-1]))
+                    if not got.ok:
+                        return got
+                    out.append(got.data)
+        except (KeyError, TypeError, AttributeError, ValueError) as e:
+            return _unexpected(e)
+        return Result(data=out)
+
+    def sub_issues(self, number: int) -> Result[list[Item]]:
+        return self._related(number, "Hierarchy-Forward")
+
+    def blocked_by(self, number: int) -> Result[list[Item]]:
+        return self._related(number, "Dependency-Reverse")
+
+    def branch_names(self) -> Result[list[str]]:
+        res = _json("repos", "ref", "list", "--repository", self.repo, "--project", self.project,
+                    "--filter", "heads/", "--organization", self.org_url)
+        try:
+            return Result(data=[_branch(r["name"]) for r in res.data]) if res.ok else res
+        except (KeyError, TypeError) as e:
             return _unexpected(e)
 
     def login(self) -> Result[str]:

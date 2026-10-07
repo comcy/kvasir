@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 from dataclasses import replace
 
+from kvasir.platform.az import Azure
 from kvasir.platform.gh import GitHub
 from kvasir.platform.models import IssueStatus, Item, ItemStatus, PullRequest, Result
 from kvasir.platform.stepper import Facts, feature_stepper, ticket_stepper
@@ -77,7 +78,7 @@ def _with_stepper(st: ItemStatus, feature: bool, subs: list[Item], prs: list[Pul
     return replace(st, stepper=(feature_stepper if feature else ticket_stepper)(f, prev))
 
 
-def issue_status(gh: GitHub, number: int) -> Result[IssueStatus]:
+def issue_status(gh: GitHub | Azure, number: int) -> Result[IssueStatus]:
     """Issue + sub-issues, each with blockers and status. First failing gh call ends it with its Error."""
     root = gh.item(number)
     if not root.ok:
