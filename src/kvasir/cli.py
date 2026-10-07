@@ -221,7 +221,13 @@ def _item_json(s) -> dict:
     return {"number": i.number, "title": i.title, "state": i.state, "state_reason": i.state_reason,
             "labels": list(i.labels), "status": s.status, "status_source": s.source, "reason": s.reason,
             "hint": s.hint, "schedule": _schedule_json(i.schedule), "notices": list(s.notices),
-            "blocked_by": [{"repo": b.repo, "number": b.number, "state": b.state} for b in s.blocked_by]}
+            "blocked_by": [{"repo": b.repo, "number": b.number, "state": b.state} for b in s.blocked_by],
+            **({"stepper": _stepper_json(s.stepper)} if s.stepper else {})}
+
+
+def _stepper_json(sp) -> dict:
+    return {"level": sp.level, "steps": [{"name": x.name, "state": x.state} for x in sp.steps],
+            **({"previous": list(sp.previous)} if sp.previous else {})}
 
 
 def _item_text(s, indent: str) -> list[str]:
@@ -233,6 +239,11 @@ def _item_text(s, indent: str) -> list[str]:
     if s.hint:
         lines.append(f"{indent}    ! {s.hint}")
     lines += [f"{indent}    ! {n}" for n in s.notices]
+    if s.stepper and s.stepper.steps:
+        mark = {"done": "x", "current": ">", "open": " "}
+        lines.append(f"{indent}    Schritte: " + " -> ".join(f"[{mark[x.state]}] {x.name}" for x in s.stepper.steps))
+    if s.stepper and s.stepper.previous:
+        lines.append(f"{indent}    Vorgänger: " + ", ".join(f"#{n}" for n in s.stepper.previous))
     return lines
 
 
