@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from kvasir import daylog
 from kvasir.platform import (
     Error,
     ErrorKind,
@@ -130,6 +131,16 @@ def snapshot(url: str, patterns: list[str], branches: list[str], error: Error | 
                     e.fetched_at if e else None, error, "az" if plat and plat.kind == "azure" else "gh", cards)
 
 
+def _log_changes(url: str, kind: str, old: dict[int, str] | None, new: list) -> None:
+    """Day log: new vs. cached state per number. `old` None (no baseline) = nothing known, nothing logged."""
+    if old is None:
+        return
+    for x in new:
+        if x.number not in old or old[x.number] != x.state:
+            daylog.record({"type": kind, "url": url, "number": x.number, "title": x.title,
+                           "old": old.get(x.number), "new": x.state})
+
+
 def refresh(url: str, patterns: list[str], branches: list[str], provider: Provider | None = None) -> Error | None:
     """Fetch PR list, run list and the needed issues (one call each) into the cache. Blocking.
 
@@ -142,7 +153,9 @@ def refresh(url: str, patterns: list[str], branches: list[str], provider: Provid
     err = None
     prs = p.pull_requests(PR_LIMIT)
     if prs.ok:
+        old = cache.read(url, "pull_requests", PullRequest)
         cache.write(url, "pull_requests", prs.data)
+        _log_changes(url, "pr_state", {x.number: x.state for x in old.items} if old else None, prs.data)
     elif prs.error.kind in FATAL:
         return prs.error  # runs/issues would fail the same way
     else:
@@ -157,7 +170,10 @@ def refresh(url: str, patterns: list[str], branches: list[str], provider: Provid
     for n in numbers:
         res = p.work_item(n)
         if res.ok:
+            old = cache.read(url, f"work_item:{n}", WorkItem)
             cache.write(url, f"work_item:{n}", [res.data])
+            if old and old.items:
+                _log_changes(url, "issue_state", {n: old.items[0].state}, [res.data])
         elif res.error.kind in FATAL:
             return err or res.error
     if plat.kind == "github" and hasattr(p, "sub_issues"):  # status = same core as `kvasir status`
