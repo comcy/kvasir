@@ -6,6 +6,7 @@ Linux: command is shown, never run. Login and scopes are shown, never run. No su
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -14,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from kvasir import metrics, repo_file
+from kvasir import llm, metrics, repo_file
 from kvasir.config import load_local, load_repos
 from kvasir.platform.detect import detect_platform
 
@@ -233,10 +234,33 @@ def check_repo_files(url: str, root: Path, cfg) -> list[Check]:
     return out or [Check("ok", f"{url}: repo files ok")]
 
 
+def check_llm(local) -> list[Check]:
+    """Only when [llm] is set in local.toml: config valid, endpoint/command reachable, model present."""
+    if local is None or not local.llm:
+        return []
+    try:
+        cfg = llm.parse(local.llm)
+    except ValueError as e:
+        return [Check("fail", f"[llm] invalid: {e}", "fix [llm] in local.toml")]
+    res = llm.probe(cfg)
+    if not res.ok:
+        return [Check("fail", f"llm {cfg.provider}: {res.error.message}", "see README, section LLM")]
+    out = [Check("ok", f"llm {cfg.provider}: {llm.target(cfg)} reachable")]
+    if cfg.provider == "openai":
+        if cfg.api_key_env and cfg.api_key_env not in os.environ:
+            out.append(Check("warn", f"llm: env variable {cfg.api_key_env} not set", f"export {cfg.api_key_env}=..."))
+        if llm.model_listed(cfg.model, res.data):
+            out.append(Check("ok", f"llm model {cfg.model} available"))
+        else:
+            out.append(Check("fail", f"llm model {cfg.model} not found at endpoint", "pull/load the model or fix model"))
+    return out
+
+
 def all_checks(system: str | None = None) -> list[Check]:
     out = [check_git(), *check_cli(CLIS["github"], system)]
     cfg, repos, local = check_config()
     out += cfg
+    out += check_llm(local)
     if any((r := detect_platform(f"https://{u}")) and r.kind == "azure" for u in repos):
         out += check_cli(CLIS["azure"], system)  # az only matters when an Azure repo is registered
     for url in repos:

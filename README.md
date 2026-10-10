@@ -196,6 +196,32 @@ Geprüft werden: `git` ab 2.36, `gh` im PATH, `gh` angemeldet, Berechtigung `rea
 
 Unter Linux führt kvasir nie eine Installation aus (braucht `sudo`). Fehlt `winget`/`brew`, gibt es nur den Link. Anmeldung (`gh auth login`) und Berechtigung (`gh auth refresh -s read:project`) zeigt kvasir nur an und führt sie nie selbst aus.
 
+## LLM (`[llm]` in `local.toml`)
+
+Fundament für LLM-Funktionen; ohne `[llm]` sind sie deaktiviert und nichts bricht. kvasir ist provider-agnostisch und speichert keine Tokens: bei `openai` steht nur der **Name** einer Env-Variable in der Datei, bei `command` meldet sich die offizielle CLI selbst an.
+
+```toml
+# Ollama (lokal)
+[llm]
+provider = "openai"
+base_url = "http://localhost:11434/v1"
+model = "llama3"
+
+# vLLM, LM Studio, llama.cpp-server: gleiche Form, anderer base_url (z. B. http://localhost:8000/v1)
+# mit Schlüssel aus der Umgebung:  api_key_env = "MY_LLM_KEY"
+
+# Claude Code CLI (Prompt via stdin, Antwort via stdout; Argumentliste, keine Shell)
+[llm]
+provider = "command"
+command = ["claude", "-p"]
+```
+
+Weitere Befehle (`["ollama", "run", "<modell>"]`, `["gemini", "-p"]`) folgen derselben Form; ob `gemini -p` Prompts per stdin liest, ist **zu prüfen**. Optional `timeout` (Sekunden, Standard 120).
+
+- **Datenschutz:** Vor dem ersten Senden an einen nicht-lokalen Endpunkt (nicht localhost/privates Netz; `command` gilt immer als nicht lokal) ist eine einmalige Bestätigung nötig; sie wird in `[llm] confirmed` in `local.toml` gespeichert. Pro Repo abschaltbar: `llm = false` im Eintrag in `repos.toml`.
+- **`kvasir doctor`** prüft die Config, die Erreichbarkeit (`GET /models` bzw. Befehl im PATH) und das Modell.
+- Fehler (nicht erreichbar, Modell fehlt, Befehl fehlt, Timeout) kommen als Ergebnis zurück, nicht als Exception. Python-API: `kvasir.llm.complete(messages)`.
+
 ## Konfiguration
 
 Zwei Dateien, Verzeichnis je Betriebssystem:
@@ -207,7 +233,7 @@ Zwei Dateien, Verzeichnis je Betriebssystem:
 | überschreiben | Umgebungsvariable `KVASIR_CONFIG_DIR` |
 
 - **`repos.toml`**: pro Remote-URL (z. B. `github.com/comcy/kvasir`) Branch-Vorlagen, Fetch-Intervall (`fetch_interval`) und Intervall für die Plattform-Daten (GitHub, Azure DevOps) (`platform_interval`, Standard 10), jeweils in Minuten. Unabhängig vom Rechner, kann synchronisiert werden.
-- **`local.toml`**: pro Rechner der lokale Pfad je Repo und `open_command`.
+- **`local.toml`**: pro Rechner der lokale Pfad je Repo, `open_command` und `[llm]` (siehe oben).
 
 `open_command` startet ein neues Terminal im Worktree, `{path}` wird durch den Pfad ersetzt. Standard: Windows `wt.exe -d {path}`, macOS und Linux `kitty --directory {path}`.
 
