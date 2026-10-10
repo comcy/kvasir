@@ -27,6 +27,7 @@ from kvasir.platform.status import issue_status
 from kvasir.platform.stepper import check_detector
 from kvasir.repo_settings import PRESETS, preset_key, update_repo, validate_patterns
 from kvasir.repo_url import normalize
+from kvasir.status_view import render, schedule_lines, status_name
 
 app = typer.Typer(name="kvasir", help="Manage Git worktrees across repos.", no_args_is_help=True)
 
@@ -262,24 +263,11 @@ def tui() -> None:
     KvasirApp().run()
 
 
-_LABELS = {"done": "erledigt", "dropped": "verworfen", "blocked": "blockiert", "in_review": "in Review",
-           "in_progress": "in Arbeit", "open": "offen"}
-
-
 def _schedule_json(sc) -> dict:
     iso = lambda d: d.isoformat() if d else None
     return {"deadline": iso(sc.deadline),
             "deadlines": [{"date": iso(d.date), "label": d.label} for d in sc.deadlines],
             "planned_from": iso(sc.planned_from), "planned_to": iso(sc.planned_to)}
-
-
-def _schedule_text(sc, indent: str) -> list[str]:
-    lines = []
-    if sc.deadlines:
-        lines.append(f"{indent}    Frist: " + ", ".join(f"{d.date} ({d.label})" for d in sc.deadlines))
-    if sc.planned_from:
-        lines.append(f"{indent}    Geplant: {sc.planned_from} – {sc.planned_to}")
-    return lines
 
 
 def _item_json(s) -> dict:
@@ -297,11 +285,10 @@ def _stepper_json(sp) -> dict:
 
 
 def _item_text(s, indent: str) -> list[str]:
-    name = _LABELS.get(s.status, s.status) + (" (laut Label)" if s.source == "label" else "")
-    lines = [f"{indent}#{s.item.number} [{name}] {s.item.title}"]
+    lines = [f"{indent}#{s.item.number} [{status_name(s)}] {s.item.title}"]
     if s.blocked_by:
         lines.append(f"{indent}    blockiert von: " + ", ".join(f"#{b.number} ({b.state})" for b in s.blocked_by))
-    lines += _schedule_text(s.item.schedule, indent)
+    lines += [f"{indent}    {x}" for x in schedule_lines(s.item.schedule)]
     if s.hint:
         lines.append(f"{indent}    ! {s.hint}")
     lines += [f"{indent}    ! {n}" for n in s.notices]
@@ -317,11 +304,11 @@ def _item_text(s, indent: str) -> list[str]:
 def status(
     issue: Annotated[str, typer.Argument(help="Issue number, e.g. #13")],
     repo: Annotated[str | None, typer.Option(help="owner/repo (default: origin of the current directory)")] = None,
-    format: Annotated[str, typer.Option(help="text | json")] = "text",
+    format: Annotated[str, typer.Option(help="table | text | json")] = "table",
 ) -> None:
     """Sub-issues, blockers and status (from facts) of a GitHub issue or Azure DevOps work item. Read-only."""
-    if format not in ("text", "json") or not issue.lstrip("#").isdigit():
-        typer.echo("usage: kvasir status #<nr> [--repo owner/repo] [--format text|json]", err=True)
+    if format not in ("table", "text", "json") or not issue.lstrip("#").isdigit():
+        typer.echo("usage: kvasir status #<nr> [--repo owner/repo] [--format table|text|json]", err=True)
         raise typer.Exit(2)
     if repo is None:
         try:
@@ -342,6 +329,9 @@ def status(
     if format == "json":
         typer.echo(json.dumps({"repo": st.repo, "issue": _item_json(st.issue),
                                "sub_issues": [_item_json(s) for s in st.sub_issues]}, ensure_ascii=False, indent=2))
+        return
+    if format == "table":
+        typer.echo(render(st))
         return
     lines = _item_text(st.issue, "")
     if st.sub_issues:

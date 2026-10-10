@@ -155,7 +155,7 @@ def feature_stepper(f: Facts, previous: tuple[int, ...] = (), phases: Phases = P
         # unknown detector (typo in a repo file) = unknown, never an exception; no detector = not observable
         res = [detect(s, f) if check_detector(s) is None else None for s in specs]
         if specs and None not in res:
-            steps.append((name, all(res)))
+            steps.append((name, all(res) or f.item.state == "closed"))  # closed feature = every phase done
     return Stepper("feature", _mark(steps), previous)
 
 

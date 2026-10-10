@@ -144,6 +144,8 @@ Ein neuer Branch ist gültig, wenn er mindestens eine Vorlage trifft. Ein Versto
 
 Sub-Issues, `blocked_by`-Beziehungen und Status eines GitHub-Issues, rein lesend über `gh`. Repo aus `origin` des aktuellen Ordners oder `--repo owner/repo`; `--format json` für die maschinenlesbare Fassung.
 
+Standardausgabe ist eine Tabelle (`--format table`): Ticket (rechtsbündig), Titel (bei schmalem Terminal mit `…` gekürzt), Status und Fortschritt. Status-Symbole bleiben ohne Farbe lesbar (`NO_COLOR`): `✓` erledigt, `◐` in Review, `▶` in Arbeit, `⛔` blockiert, `○` offen, `✗` verworfen. Fortschritt ist eine Punktleiste über die Schritte plus der aktuelle Schritt, z. B. `●●●○○ Abnahme` (beim Feature die Phasen; ein geschlossenes Feature zeigt alle Phasen erledigt, `●●●●● fertig`). Hinweise (Blocker, Termine, Label-Widerspruch, Vorgänger) stehen als Block `Hinweise` unter der Tabelle. `--format text` liefert die frühere Zeilenausgabe, `--format json` die unveränderte maschinenlesbare Fassung.
+
 Status aus Tatsachen, in dieser Reihenfolge: geschlossen = erledigt (Grund "nicht geplant" oder Label `wontfix` = verworfen), offener Blocker = blockiert, offener PR (nicht Draft) = in Review, Draft-PR oder Branch mit der Issue-Nummer im Namen = in Arbeit, sonst offen. Ein `status:*`-Label widerspricht nur als Hinweis (`! Label sagt in-review, PR #7 ist Draft`); es ersetzt den Status nur dort, wo keine Tatsache vorliegt, und ist dann mit "(laut Label)" gekennzeichnet. Grenzen: höchstens 100 Sub-Issues, Blocker und offene PRs; Branch-Treffer über die Nummer als eigenes Namensstück (`feat/5-x`, nicht `feat/15-x`).
 
 ## `kvasir doctor`
