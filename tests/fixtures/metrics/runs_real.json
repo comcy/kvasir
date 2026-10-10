@@ -1,0 +1,26 @@
+[
+ {
+  "conclusion": "success",
+  "createdAt": "2026-10-10T10:38:49Z",
+  "event": "pull_request",
+  "headBranch": "feature/140-metrics-daten"
+ },
+ {
+  "conclusion": "success",
+  "createdAt": "2026-10-10T09:06:49Z",
+  "event": "pull_request",
+  "headBranch": "chore/archive-prio-labels"
+ },
+ {
+  "conclusion": "success",
+  "createdAt": "2026-10-10T09:02:26Z",
+  "event": "pull_request",
+  "headBranch": "feature/136-prio-labels"
+ },
+ {
+  "conclusion": "success",
+  "createdAt": "2026-10-09T20:46:46Z",
+  "event": "pull_request",
+  "headBranch": "feature/134-footer-link-zum-quellcode-auf-github"
+ }
+]

@@ -191,6 +191,16 @@ class GitHub:
         """Raw REST timeline of an issue (labeled/closed/... with created_at). # ponytail: first 100 events"""
         return _json("api", f"repos/{self.slug}/issues/{number}/timeline?per_page=100")
 
+    def merged_prs(self, limit: int = 200) -> Result[list[dict]]:
+        """Raw merged PRs (number, createdAt, mergedAt, headRefName), newest first. # ponytail: first `limit`"""
+        return _json("pr", "list", "-R", self.slug, "--state", "merged", "--limit", str(limit),
+                     "--json", "number,title,createdAt,mergedAt,headRefName")
+
+    def runs_since(self, since: str, limit: int = 1000) -> Result[list[dict]]:
+        """Raw workflow runs created on/after `since` (YYYY-MM-DD). # ponytail: first `limit`"""
+        return _json("run", "list", "-R", self.slug, "--created", f">={since}", "--limit", str(limit),
+                     "--json", "conclusion,createdAt,headBranch,event")
+
     def sub_issues(self, number: int) -> Result[list[Item]]:
         # ponytail: first 100 only, no pagination
         return self._items(f"issues/{number}/sub_issues")

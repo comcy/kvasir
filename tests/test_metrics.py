@@ -23,13 +23,16 @@ CYCLE = "cycle\tlagging\tDurchlaufzeit\th\tticket_cycle_time\t24\n"
 
 
 class FakeGh:
-    def __init__(self, monkeypatch, issues, timelines):
-        self.calls, self.issues, self.timelines = [], issues, timelines
+    def __init__(self, monkeypatch, issues, timelines, prs=(), runs=()):
+        self.calls, self.issues, self.timelines, self.prs, self.runs = [], issues, timelines, list(prs), list(runs)
         monkeypatch.setattr(ghmod.subprocess, "run", self)
 
     def __call__(self, args, **kw):
         assert args[0] == "gh"
         self.calls.append(args)
+        if args[1] in ("pr", "run"):
+            assert args[2] == "list"
+            return subprocess.CompletedProcess(args, 0, json.dumps(self.prs if args[1] == "pr" else self.runs).encode(), b"")
         path = args[2].split("?")[0]
         if path == "repos/o/r/issues":
             ans = self.issues
@@ -83,7 +86,7 @@ def test_median_n_und_einheit(tmp_path, monkeypatch):
     res = run(tmp_path, HEAD + CYCLE)
     assert res.exit_code == 0, res.output
     assert "Durchlaufzeit" in res.output and "25 h" in res.output and "n=4" in res.output and "Ziel 24" in res.output
-    assert all(c[1] == "api" and "-X" not in c and "--method" not in c for c in fake.calls)  # nur lesend
+    assert all(c[1] in ("api", "pr", "run") and c[2] != "create" and "-X" not in c and "--method" not in c for c in fake.calls)  # nur lesend
 
 
 def test_einheit_tage(tmp_path, monkeypatch):
@@ -140,3 +143,75 @@ def test_ohne_metrics_tsv(tmp_path):
 
 def test_ungueltiges_since(tmp_path):
     assert run(tmp_path, HEAD + CYCLE, "--since", "x").exit_code == 2
+
+
+PRD = "prd\tleading\tPR-Dauer\th\tpr_duration\t\n"
+RED = "red\tleading\tPRs mit rotem Lauf\t%\tci_red_before_merge\t\n"
+
+
+def pr(n, created, merged, branch=None):
+    return {"number": n, "title": f"P{n}", "createdAt": iso(created), "mergedAt": iso(merged),
+            "headRefName": branch or f"feat/{n}"}
+
+
+def ci(branch, when, conclusion="success", event="pull_request"):
+    return {"conclusion": conclusion, "createdAt": iso(when), "headBranch": branch, "event": event}
+
+
+def prs_fake(monkeypatch, prs, runs=()):
+    return FakeGh(monkeypatch, [], {}, prs, runs)
+
+
+def test_pr_duration_median(tmp_path, monkeypatch):
+    t = datetime.now(UTC).replace(microsecond=0) - timedelta(days=2)
+    fake = prs_fake(monkeypatch, [pr(i, t, t + timedelta(hours=h)) for i, h in enumerate((1, 2, 6, 10), 1)])
+    out = run(tmp_path, HEAD + PRD).output
+    assert "PR-Dauer: 4 h, n=4" in out
+    assert all(c[2] == "list" for c in fake.calls if c[1] in ("pr", "run"))
+
+
+def test_pr_duration_zu_klein_und_keine_daten(tmp_path, monkeypatch):
+    t = datetime.now(UTC).replace(microsecond=0) - timedelta(days=2)
+    prs_fake(monkeypatch, [pr(1, t, t + timedelta(hours=1))])
+    assert "n=1 (zu klein)" in run(tmp_path, HEAD + PRD).output
+    prs_fake(monkeypatch, [])
+    assert "keine Daten" in run(tmp_path, HEAD + PRD).output
+
+
+def test_ci_red_anteil(tmp_path, monkeypatch):
+    """Ohne Läufe zählt nicht rot; mehrfach rot zählt einmal; rot nach Merge, Fremdlauf und cancelled zählen nicht."""
+    t = datetime.now(UTC).replace(microsecond=0) - timedelta(days=2)
+    h = timedelta(hours=1)
+    prs = [pr(i, t, t + 4 * h) for i in (1, 2, 3, 4)]
+    runs = [
+        ci("feat/1", t + h, "failure"), ci("feat/1", t + 2 * h, "failure"), ci("feat/1", t + 3 * h),  # mehrfach rot
+        ci("feat/2", t + h),  # grün
+        # feat/3: keine Läufe
+        ci("feat/4", t + 5 * h, "failure"),  # rot erst nach Merge
+        ci("feat/4", t + h, "cancelled"),  # abgebrochen
+        ci("feat/4", t + h, "failure", event="push"),  # anderes Ereignis
+        ci("feat/9", t + h, "failure"),  # fremder Branch
+    ]
+    prs_fake(monkeypatch, prs, runs)
+    assert "PRs mit rotem Lauf: 25 %, n=4" in run(tmp_path, HEAD + RED).output
+
+
+def test_pr_zeitraum(tmp_path, monkeypatch):
+    old = datetime(2020, 1, 3, tzinfo=UTC)
+    prs_fake(monkeypatch, [pr(i, old, old + timedelta(hours=2)) for i in (1, 2, 3)])
+    assert "keine Daten" in run(tmp_path, HEAD + PRD).output
+    assert "2 h, n=3" in run(tmp_path, HEAD + PRD, "--since", "36500d").output
+
+
+def test_echte_pr_und_lauf_form(tmp_path, monkeypatch):
+    """Gekürzte echte Antworten von comcy/comcy.github.io (`gh pr list --state merged`, `gh run list`)."""
+    prs = json.loads((FIX / "prs_real.json").read_text(encoding="utf-8"))
+    runs = json.loads((FIX / "runs_real.json").read_text(encoding="utf-8"))
+    prs_fake(monkeypatch, prs, runs)
+    out = run(tmp_path, HEAD + PRD + RED, "--since", "36500d").output
+    assert "0.1 h, n=4" in out and "0 %, n=4" in out
+
+
+def test_pr_gh_fehler(tmp_path, monkeypatch):
+    monkeypatch.setattr(ghmod.subprocess, "run", lambda a, **kw: subprocess.CompletedProcess(a, 1, b"", b"boom"))
+    assert run(tmp_path, HEAD + PRD).exit_code == 1
