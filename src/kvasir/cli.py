@@ -381,7 +381,7 @@ def metrics(
     since: Annotated[str, typer.Option(help="Zeitraum, z. B. 30d")] = "30d",
     repo: Annotated[str | None, typer.Option(help="owner/repo (default: origin of the current directory)")] = None,
 ) -> None:
-    """Kennzahlen aus workflow/metrics.tsv (Text). Read-only; erste Fassung: ticket_cycle_time auf GitHub."""
+    """Kennzahlen aus workflow/metrics.tsv (Text). Read-only; ticket_cycle_time, pr_duration, ci_red_before_merge auf GitHub."""
     try:
         span = metrics_mod.parse_since(since)
     except ValueError as e:

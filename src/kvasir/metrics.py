@@ -70,7 +70,46 @@ def events(gh: GitHub, since: datetime) -> Result[list[Event]]:
         if not tl.ok:
             return tl
         out += github_events(it.number, tl.data)
+    pr = pr_ci_events(gh, since)
+    return pr if not pr.ok else Result(data=out + pr.data)
+
+
+# --- PR- und CI-Ereignisse (pr_duration, ci_red_before_merge) ---
+
+def pr_ci_events(gh: GitHub, since: datetime) -> Result[list[Event]]:
+    """Seit `since` gemergte PRs: pr_erstellt, pr_gemergt und je Lauf des PR-Branchs zwischen Erstellen und Merge
+    ci_rot (failure) / ci_gruen (success). Item = PR-Nummer. Abgebrochene/andere Läufe und Nicht-PR-Läufe zählen nicht."""
+    prs = gh.merged_prs()
+    if not prs.ok:
+        return prs
+    runs = gh.runs_since((since - timedelta(days=1)).date().isoformat())  # PR kann vor `since` erstellt sein
+    if not runs.ok:
+        return runs
+    out: list[Event] = []
+    for p in prs.data:
+        created, merged = _time(p["createdAt"]), _time(p["mergedAt"])
+        if merged < since:
+            continue
+        out += [Event(p["number"], "pr_erstellt", created), Event(p["number"], "pr_gemergt", merged)]
+        for r in runs.data:
+            art = {"failure": "ci_rot", "success": "ci_gruen"}.get(r.get("conclusion"))
+            if art and r.get("event") == "pull_request" and r.get("headBranch") == p["headRefName"] \
+                    and created <= _time(r["createdAt"]) <= merged:
+                out.append(Event(p["number"], art, _time(r["createdAt"])))
     return Result(data=out)
+
+
+def pr_seconds(evs: list[Event]) -> list[float]:
+    """Je PR: pr_erstellt bis pr_gemergt."""
+    start = {e.item: e.zeit for e in evs if e.art == "pr_erstellt"}
+    return [(e.zeit - start[e.item]).total_seconds() for e in evs if e.art == "pr_gemergt" and e.item in start]
+
+
+def ci_red_share(evs: list[Event]) -> tuple[float, int] | None:
+    """(Anteil gemergter PRs mit mindestens einem ci_rot in %, n) oder None ohne PRs."""
+    merged = {e.item for e in evs if e.art == "pr_gemergt"}
+    red = {e.item for e in evs if e.art == "ci_rot"} & merged
+    return (100 * len(red) / len(merged), len(merged)) if merged else None
 
 
 def cycle_seconds(evs: list[Event]) -> list[float]:
@@ -91,18 +130,25 @@ def _num(x: float) -> str:
     return f"{x:.1f}".removesuffix(".0")
 
 
+def _sized(n: int, value: str) -> str:
+    return f"n={n} (zu klein)" if n < MIN_N else f"{value}, n={n}"
+
+
+def _median_text(xs: list[float], unit: str) -> str:
+    return _sized(len(xs), f"{_num(median(xs) / UNIT_SECONDS[unit])} {unit}") if xs else "keine Daten"
+
+
 def report(rows: list[dict[str, str]], evs: list[Event]) -> list[Line]:
     out = []
     for r in rows:
         unit, target = r.get("unit", ""), r.get("target", "")
         if r.get("source") == "ticket_cycle_time" and unit in UNIT_SECONDS:
-            xs = cycle_seconds(evs)
-            if not xs:
-                text = "keine Daten"
-            elif len(xs) < MIN_N:
-                text = f"n={len(xs)} (zu klein)"
-            else:
-                text = f"{_num(median(xs) / UNIT_SECONDS[unit])} {unit}, n={len(xs)}"
+            text = _median_text(cycle_seconds(evs), unit)
+        elif r.get("source") == "pr_duration" and unit in UNIT_SECONDS:
+            text = _median_text(pr_seconds(evs), unit)
+        elif r.get("source") == "ci_red_before_merge" and unit == "%":
+            share = ci_red_share(evs)
+            text = "keine Daten" if not share else _sized(share[1], f"{_num(share[0])} %")
         else:
             text = "unbekannt"
         out.append(Line(r.get("id", ""), r.get("name", ""), unit, target, text + (f", Ziel {target}" if target else "")))
