@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from kvasir import llm, metrics, repo_file
+from kvasir import llm, metrics, repo_file, report_out
 from kvasir.config import load_local, load_repos
 from kvasir.platform.detect import detect_platform
 
@@ -256,11 +256,23 @@ def check_llm(local) -> list[Check]:
     return out
 
 
+def check_report(local) -> list[Check]:
+    """Only when [report] is set in local.toml: entries valid."""
+    if local is None or not local.report:
+        return []
+    try:
+        cfg = report_out.parse(local.report)
+    except ValueError as e:
+        return [Check("fail", f"[report] invalid: {e}", "fix [report] in local.toml")]
+    return [Check("ok", f"report: {cfg.mode} -> {cfg.output}")]
+
+
 def all_checks(system: str | None = None) -> list[Check]:
     out = [check_git(), *check_cli(CLIS["github"], system)]
     cfg, repos, local = check_config()
     out += cfg
     out += check_llm(local)
+    out += check_report(local)
     if any((r := detect_platform(f"https://{u}")) and r.kind == "azure" for u in repos):
         out += check_cli(CLIS["azure"], system)  # az only matters when an Azure repo is registered
     for url in repos:

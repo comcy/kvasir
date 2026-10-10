@@ -56,6 +56,7 @@ class KvasirApp(App):
         Binding("u", "refresh_platform", "Plattform"),
         Binding("i", "overview", "Overview"),
         Binding("e", "edit_repo", "Edit"),
+        Binding("s", "summary", "Summary"),
         Binding("a", "ask", "Ask"),
         Binding("h", "focus_previous", "Left", show=False),
         Binding("l", "focus_next", "Right", show=False),
@@ -144,6 +145,24 @@ class KvasirApp(App):
             self.action_reload()  # config is read per use; reload redraws with the new templates
 
         self.push_screen(SettingsScreen(row.url, tilde(row.path) if row.path else "", cfg), done)
+
+    def action_summary(self) -> None:
+        from kvasir import llm
+        from kvasir.tui.summary_screen import SummaryScreen
+
+        ri = self.query_one(RepoList).highlighted
+        row = self.rows[ri] if ri is not None and ri < len(self.rows) else None
+        if row is None or row.path is None:
+            return self.notify("Select a readable repo first", severity="warning")
+        try:
+            cfg = llm.load()
+            if cfg is None:
+                return self.notify("Kein [llm] in local.toml konfiguriert (kvasir doctor zeigt den Stand)", severity="warning")
+            if not llm.repo_enabled(row.url):
+                return self.notify("KI für dieses Repo deaktiviert (repos.toml llm = false)", severity="warning")
+        except (OSError, ValueError) as e:
+            return self.notify(f"[llm] ungültig: {e}", severity="error")
+        self.push_screen(SummaryScreen(row.url, row.path, row.view, cfg))
 
     def action_fetch_all(self) -> None:
         paths = load_local().paths

@@ -24,6 +24,9 @@ Pro Repo konfigurierte Namensvorlage mit Platzhaltern `{type}`, `{id}`, `{slug}`
 ### Notiz
 Freitext zu einem Worktree (Taste `m`, oder Abschlussnotiz beim Entfernen). Einziger eigener Zustand neben der Konfiguration.
 
+### Bericht
+Rendert einen Kalendertag (lokal) aus `git log` (eigene Commits aller Branches der registrierten Repos), Tageslog-Ereignissen (Notizen, Statuswechsel, Worktrees) und Snapshot (uncommittete Arbeit): `kvasir today`. Abgeleitete Ansicht, kein eigenes Journal. Optional per `[report]` in `local.toml` in eine Datei (z. B. Abschnitt einer Tagesnotiz im Vault) abgelegt; reine Datei-/Markdown-Ablage, nur durch ausdrücklichen `kvasir today`-Aufruf.
+
 ### Konfiguration
 - **Synchronisierbar** (pro Remote-URL): Branch-Vorlagen, Fetch-Intervall.
 - **Lokal** (pro Rechner): lokaler Pfad je Repo, `open_command`.
