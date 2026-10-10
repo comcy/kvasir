@@ -187,6 +187,10 @@ class GitHub:
         except (KeyError, TypeError, AttributeError, IndexError) as e:
             return Result(error=Error(ErrorKind.OTHER, f"unexpected gh output: {e!r}"))
 
+    def timeline(self, number: int) -> Result[list[dict]]:
+        """Raw REST timeline of an issue (labeled/closed/... with created_at). # ponytail: first 100 events"""
+        return _json("api", f"repos/{self.slug}/issues/{number}/timeline?per_page=100")
+
     def sub_issues(self, number: int) -> Result[list[Item]]:
         # ponytail: first 100 only, no pagination
         return self._items(f"issues/{number}/sub_issues")
