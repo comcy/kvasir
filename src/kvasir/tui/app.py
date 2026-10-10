@@ -57,6 +57,7 @@ class KvasirApp(App):
         Binding("i", "overview", "Overview"),
         Binding("e", "edit_repo", "Edit"),
         Binding("s", "summary", "Summary"),
+        Binding("a", "ask", "Ask"),
         Binding("h", "focus_previous", "Left", show=False),
         Binding("l", "focus_next", "Right", show=False),
     ]
@@ -323,6 +324,11 @@ class KvasirApp(App):
     def action_toggle_remote(self) -> None:
         self.show_remote = not self.show_remote
         self._show_entries(self.query_one(RepoList).highlighted, self.query_one(EntryList).current_entry() or 0)
+
+    def action_ask(self) -> None:
+        from kvasir.tui.prompt_screen import PromptScreen
+
+        self.push_screen(PromptScreen())
 
     def action_note(self) -> None:
         ri, ei = self.query_one(RepoList).highlighted, self.query_one(EntryList).current_entry()
