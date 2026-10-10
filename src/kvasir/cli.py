@@ -413,8 +413,12 @@ def metrics(
     since: Annotated[str, typer.Option(help="Zeitraum, z. B. 30d")] = "30d",
     repo: Annotated[str | None, typer.Option(help="owner/repo (default: origin of the current directory)")] = None,
     evals: Annotated[Path | None, typer.Option(help="Ordner mit Eval-Berichten (default: evals/reports/ des Checkouts)")] = None,
+    format: Annotated[str, typer.Option(help="text | json | markdown")] = "text",
 ) -> None:
-    """Kennzahlen aus workflow/metrics.tsv (Text). Read-only; GitHub oder Azure DevOps (wie status), lokale Eval-Berichte."""
+    """Kennzahlen aus workflow/metrics.tsv (text, json, markdown). Read-only; GitHub oder Azure DevOps (wie status), lokale Eval-Berichte."""
+    if format not in ("text", "json", "markdown"):
+        typer.echo("--format: expected text | json | markdown", err=True)
+        raise typer.Exit(2)
     try:
         span = metrics_mod.parse_since(since)
     except ValueError as e:
@@ -435,12 +439,18 @@ def metrics(
         raise typer.Exit(1) from e
     gh, since_dt = provider_for(pr), metrics_mod.now() - span
     srcs = {r.get("source") for r in rows}
-    res = metrics_mod.events(gh, since_dt, srcs)
+    res = metrics_mod.events(gh, since_dt, srcs, metrics_mod.status_labels(root))
     rework = metrics_mod.rework_counts(gh, since_dt) if "rework_fixes_per_change" in srcs and isinstance(gh, GitHub) else None  # Azure: unbekannt
     for r in (res, rework):
         if r is not None and not r.ok:
             typer.echo(f"{r.error.kind.value}: {r.error.message}", err=True)
             raise typer.Exit(1)
     pass_list = metrics_mod.eval_results(evals or root / metrics_mod.EVALS_DIR) if "eval_pass_rate" in srcs else None
-    for ln in metrics_mod.report(rows, res.data, pass_list, rework.data if rework else None):
-        typer.echo(f"{ln.name or ln.id}: {ln.text}")
+    lines = metrics_mod.report(rows, res.data, pass_list, rework.data if rework else None)
+    if format == "json":
+        typer.echo(metrics_mod.to_json(lines), nl=False)
+    elif format == "markdown":
+        typer.echo(metrics_mod.to_markdown(lines), nl=False)
+    else:
+        for ln in lines:
+            typer.echo(f"{ln.name or ln.id}: {ln.text}")

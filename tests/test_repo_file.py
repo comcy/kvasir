@@ -245,3 +245,29 @@ def test_doctor_uses_repo_vocabulary(repo, doc):
     assert "unknown detector label" in out
     assert "detector neu_ding is not evaluated by kvasir" in out
     assert "detector issue_open takes no argument" in out
+
+
+MHEAD = "id\tart\tname\tunit\tsource\n"
+
+
+def test_doctor_metrics_unknown_source_and_row_errors(repo, doc):
+    write(repo, "workflow/metrics.tsv", MHEAD + "a\tlagging\tA\th\tticket_cycle_time\na\tweird\tB\tkg\tgibt_es_nicht\n"
+                                        "c\tleading\tC\th\tpr_duration\n")
+    write(repo, "workflow/metric-sources.tsv", "name\targ\tdescription\nticket_cycle_time\t-\tx\ngibt_es_nicht\t-\ty\n")
+    r = doctor_out(repo)
+    assert r.exit_code == 1
+    for part in ("duplicate id a", "invalid art weird", "invalid unit kg", "source gibt_es_nicht is not evaluated by kvasir",
+                 "source pr_duration is not in workflow/metric-sources.tsv", "metric-sources.tsv: source gibt_es_nicht is not evaluated"):
+        assert part in r.output, r.output
+
+
+def test_doctor_metrics_missing_required_column(repo, doc):
+    write(repo, "workflow/metrics.tsv", "id\tart\tname\tsource\na\tlagging\tA\tticket_cycle_time\n")
+    r = doctor_out(repo)
+    assert "required column unit missing" in r.output and r.exit_code == 1
+
+
+def test_doctor_metrics_ok(repo, doc):
+    write(repo, "workflow/metrics.tsv", MHEAD + "a\tlagging\tA\th\tticket_cycle_time\n")
+    r = doctor_out(repo)
+    assert "repo files ok" in r.output and r.exit_code == 0

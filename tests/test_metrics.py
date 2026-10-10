@@ -287,3 +287,72 @@ def test_nacharbeit_treffer_fehltreffer_ohne_bezug(tmp_path, monkeypatch):
 def test_nacharbeit_keine_daten(tmp_path, monkeypatch):
     FakeGh(monkeypatch, [], {}, [])
     assert "keine Daten" in run(tmp_path, HEAD + REWORK).output
+
+
+# --- Formate (#75) ---
+ALLE = (CYCLE + PRD + "x\tlagging\tNeu\tn\tgibt_es_nicht\t\n"
+        + "e|f\tleading\tPipe | Name\t%\teval_pass_rate\t80\n")
+
+
+def fmt_setup(tmp_path, monkeypatch):
+    t = datetime.now(UTC).replace(microsecond=0) - timedelta(days=2)
+    issues = [closed_issue(i, iso(t)) for i in (1, 2, 3)]
+    tls = {i: timeline(t - timedelta(hours=h), t) for i, h in ((1, 10), (2, 20), (3, 30))}
+    FakeGh(monkeypatch, issues, tls, [pr(1, t, t + timedelta(hours=1)), pr(2, t, t + timedelta(hours=2))])
+    d = tmp_path / "evals" / "reports"
+    d.mkdir(parents=True)
+    (d / "2026-01-01-0000.md").write_text("| Aufgabe | Ergebnis |\n| - | - |\n| a | bestanden |\n| b | durchgefallen |\n"
+                                          "| c | bestanden |\n| d | bestanden |\n", encoding="utf-8")
+
+
+def test_format_json_feste_schluessel(tmp_path, monkeypatch):
+    fmt_setup(tmp_path, monkeypatch)
+    res = run(tmp_path, HEAD + ALLE, "--format", "json")
+    assert res.exit_code == 0, res.output
+    data = json.loads(res.output)
+    keys = ["id", "art", "name", "unit", "value", "n", "target", "status"]
+    assert all(list(d) == keys for d in data)
+    by = {d["id"]: d for d in data}
+    assert by["cycle"] == {"id": "cycle", "art": "lagging", "name": "Durchlaufzeit", "unit": "h", "value": 20,
+                           "n": 3, "target": 24, "status": "ok"}
+    assert by["prd"]["value"] is None and by["prd"]["n"] == 2 and by["prd"]["status"] == "zu_klein"  # kein Wert bei n < 3
+    assert by["x"] == {"id": "x", "art": "lagging", "name": "Neu", "unit": "n", "value": None, "n": None,
+                       "target": None, "status": "unbekannt"}
+    assert by["e|f"]["value"] == 75 and by["e|f"]["n"] == 4 and by["e|f"]["target"] == 80
+
+
+def test_format_json_keine_daten(tmp_path, monkeypatch):
+    hours(tmp_path, monkeypatch)
+    [d] = json.loads(run(tmp_path, HEAD + CYCLE, "--format", "json").output)
+    assert d["status"] == "keine_daten" and d["value"] is None and d["n"] == 0
+
+
+def test_format_markdown_referenz(tmp_path, monkeypatch):
+    fmt_setup(tmp_path, monkeypatch)
+    res = run(tmp_path, HEAD + ALLE, "--format", "markdown")
+    assert res.exit_code == 0, res.output
+    assert res.output == (
+        "| Id | Art | Metrik | Wert | n | Ziel | Status |\n"
+        "| --- | --- | --- | ---: | ---: | ---: | --- |\n"
+        "| cycle | lagging | Durchlaufzeit | 20 h | 3 | 24 | ok |\n"
+        "| prd | leading | PR-Dauer | - | 2 | - | zu klein |\n"
+        "| x | lagging | Neu | - | - | - | unbekannt |\n"
+        "| e\\|f | leading | Pipe \\| Name | 75 % | 4 | 80 | ok |\n")
+
+
+def test_format_ungueltig(tmp_path):
+    assert run(tmp_path, HEAD + CYCLE, "--format", "xml").exit_code == 2
+
+
+# --- Status-Labels aus workflow/states.tsv ---
+def test_labels_aus_states_tsv_und_rueckfall(tmp_path, monkeypatch):
+    now = datetime.now(UTC).replace(microsecond=0)
+    end = now - timedelta(days=1)
+    tl = [{"event": "labeled", "created_at": iso(end - timedelta(hours=h)), "label": {"name": "flow:in-progress"}} for h in (5,)]
+    tl.append({"event": "closed", "created_at": iso(end), "label": None})
+    FakeGh(monkeypatch, [closed_issue(i, iso(end)) for i in (1, 2, 3)], dict.fromkeys((1, 2, 3), tl))
+    assert "keine Daten" in run(tmp_path, HEAD + CYCLE).output  # Rückfall: status:in-progress, Datei fehlt
+    (tmp_path / "workflow" / "states.tsv").write_text(
+        "id\tkind\tcolor\tdescription\nflow:in-progress\tstatus\t-\t-\nflow:in-review\tstatus\t-\t-\n"
+        "in-progress\ttriage\t-\t-\n", encoding="utf-8")  # nur kind=status zählt
+    assert "5 h" in run(tmp_path, HEAD + CYCLE).output
