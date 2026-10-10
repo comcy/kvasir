@@ -213,7 +213,7 @@ def test_json_has_only_set_details(monkeypatch, tmp_path):
 def test_text_output_shows_stepper(monkeypatch, tmp_path):
     cwd_with(tmp_path, monkeypatch)
     ticket(monkeypatch, blockers=[issue(3, "closed", "completed")])
-    out = runner.invoke(app, ["status", "#1", "--repo", "o/r"]).output
+    out = runner.invoke(app, ["status", "#1", "--repo", "o/r", "--format", "text"]).output
     assert "Schritte: [>] Branch -> [ ] PR Draft" in out and "Vorgänger: #3" in out
 
 
@@ -234,7 +234,7 @@ def test_issue_open(monkeypatch, tmp_path):
     feature(monkeypatch, subs=[issue(5)])
     assert state("issue_open", tmp_path, monkeypatch) == ["done"]
     feature(monkeypatch, root=issue(1, "closed", "completed"), subs=[issue(5)])
-    assert state("issue_open", tmp_path, monkeypatch) == ["current"]
+    assert state("issue_open", tmp_path, monkeypatch) == ["done"]  # geschlossenes Feature: alle Phasen erledigt (#67)
 
 
 def test_subissues_closed(monkeypatch, tmp_path):

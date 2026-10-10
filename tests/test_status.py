@@ -94,7 +94,7 @@ def real13(monkeypatch):
 
 
 def test_lists_issue_sub_issues_and_blockers_as_text(real13):
-    res = runner.invoke(app, ["status", "#13", "--repo", "comcy/comcy.github.io"])
+    res = runner.invoke(app, ["status", "#13", "--repo", "comcy/comcy.github.io", "--format", "text"])
     assert res.exit_code == 0, res.output
     lines = res.output.splitlines()
     assert lines[0].startswith("#13 [erledigt]")
