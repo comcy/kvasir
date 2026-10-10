@@ -6,7 +6,7 @@ from typing import Annotated
 
 import typer
 
-from kvasir import __version__, repo_file
+from kvasir import __version__, repo_file, report_out
 from kvasir import doctor as doctor_mod
 from kvasir import metrics as metrics_mod
 from kvasir import report as report_mod
@@ -461,7 +461,8 @@ def metrics(
 def today(
     date: Annotated[str | None, typer.Option(help="Tag YYYY-MM-DD (default: heute)")] = None,
     format: Annotated[str, typer.Option(help="md | json")] = "md",
-    out: Annotated[Path | None, typer.Option(help="Write to file instead of stdout; {date} is replaced")] = None,
+    out: Annotated[Path | None, typer.Option(help="Write to file instead of stdout; {date} is replaced; default: [report] output")] = None,
+    stdout: Annotated[bool, typer.Option("--stdout", help="Only print to stdout, ignore --out and [report]")] = False,
 ) -> None:
     """Bericht eines Tages: Commits, Notizen, Statuswechsel, uncommittete Arbeit je Repo. Schreibt nur den Snapshot ins Tageslog und --out."""
     from datetime import date as date_cls
@@ -477,9 +478,22 @@ def today(
         report_mod.snapshot_today()
     rep = report_mod.build(day)
     text = json.dumps(rep, ensure_ascii=False, indent=2) + "\n" if format == "json" else report_mod.to_markdown(rep)
-    if out:
-        target = Path(str(out).replace("{date}", day.isoformat()))
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(text, encoding="utf-8")
+    raw = load_local().report
+    try:
+        rcfg = report_out.parse(raw) if raw else None
+    except ValueError as e:
+        if not stdout:
+            typer.echo(f"[report] invalid: {e}", err=True)
+            raise typer.Exit(2) from None
+        rcfg = None
+    # json never goes to the configured journal file (it would replace the whole note); only an explicit --out
+    dest = None if stdout else (out or (rcfg.output if rcfg and format == "md" else None))
+    if dest:
+        mode, heading = (rcfg.mode, rcfg.heading) if rcfg else ("overwrite", report_out.DEFAULT_HEADING)
+        try:
+            report_out.write(report_out.target(dest, day), text, "overwrite" if format == "json" else mode, heading)
+        except (ValueError, OSError) as e:
+            typer.echo(str(e), err=True)
+            raise typer.Exit(1) from None
     else:
         typer.echo(text, nl=False)

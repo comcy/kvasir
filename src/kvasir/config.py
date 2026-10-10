@@ -1,7 +1,7 @@
 """Config files. Two, so the shared one can be synced between machines later.
 
 - repos.toml  (shareable, keyed by normalized remote URL): branch patterns, fetch interval, platform interval
-- local.toml  (per machine): open_command, local path per repo URL, [llm] (see llm.py)
+- local.toml  (per machine): open_command, local path per repo URL, [llm] (see llm.py), [report] (see report_out.py)
 """
 import json
 import os
@@ -41,6 +41,7 @@ class LocalConfig:
     open_command: str | None = None
     paths: dict[str, str] = field(default_factory=dict)  # repo URL -> local path
     llm: dict = field(default_factory=dict)  # raw [llm] table, parsed/validated by kvasir.llm
+    report: dict = field(default_factory=dict)  # raw [report] table, parsed/validated by kvasir.report_out
 
 
 def _read(name: str) -> dict:
@@ -84,7 +85,7 @@ def save_repos(repos: dict[str, RepoConfig]) -> None:
 def load_local() -> LocalConfig:
     raw = _read("local.toml")
     return LocalConfig(open_command=raw.get("open_command"), paths=dict(raw.get("repos", {})),
-                       llm=dict(raw.get("llm", {})))
+                       llm=dict(raw.get("llm", {})), report=dict(raw.get("report", {})))
 
 
 def save_local(c: LocalConfig) -> None:
@@ -95,4 +96,7 @@ def save_local(c: LocalConfig) -> None:
     if c.llm:  # values: str, int or list of str
         out.append("\n[llm]")
         out += [f"{k} = {json.dumps(v)}" for k, v in c.llm.items()]
+    if c.report:  # values: str
+        out.append("\n[report]")
+        out += [f"{k} = {json.dumps(v)}" for k, v in c.report.items()]
     _write("local.toml", "\n".join(out) + "\n")

@@ -159,6 +159,21 @@ Status aus Tatsachen, in dieser Reihenfolge: geschlossen = erledigt (Grund "nich
 
 Bericht eines Kalendertags (lokal, Standard heute): `kvasir today [--date YYYY-MM-DD] [--format md|json] [--out PATH]`. Je registriertem Repo ein Abschnitt mit eigenen Commits (aller Branches, Autor = `user.email` des Repos), Notizen, Statuswechseln (PR/Issue), Worktree-Ereignissen und uncommitteter Arbeit (Snapshot). Notizen, Statuswechsel und Snapshots stammen aus dem Tageslog; Tage ohne Log liefern mindestens die Commits, leere Tage eine Meldung. Für heute schreibt kvasir zuerst einen Snapshot ins Tageslog. Ausgabe nach stdout; nur `--out` schreibt eine Datei (`{date}` wird ersetzt, z. B. `--out ~/berichte/{date}.md`).
 
+Optionale Ablage per `[report]` in `local.toml` (pro Rechner; ohne `[report]` bleibt alles wie oben):
+
+```toml
+[report]
+output  = "~/vault/Journal/{date}.md"   # ~ und {date} werden ersetzt; Standard für --out
+mode    = "append-section"              # append-section | replace-section | overwrite
+heading = "## Woran gearbeitet"         # Standard
+```
+
+- `append-section`: ersetzt den Abschnitt unter `heading` (bis zur nächsten Überschrift gleicher oder höherer Ebene) oder legt ihn am Dateiende an; Datei/Ordner werden bei Bedarf angelegt.
+- `replace-section`: wie `append-section`, legt aber nichts an; fehlen Datei oder Überschrift, Fehler.
+- `overwrite`: die ganze Datei wird der Bericht.
+- Abschnitte: Text ohne `# Bericht …`-Zeile, Überschriften eine Ebene unter `heading`; Text außerhalb bleibt byte-genau, Wiederholung ist idempotent. Nur `--format md`; bei `json` wird die Datei komplett geschrieben.
+- `--out PATH` hat Vorrang vor `output` (Modus bleibt), `--stdout` unterdrückt die Ablage. Geschrieben wird nur durch `kvasir today`. `kvasir doctor` meldet ungültige `[report]`-Einträge.
+
 ## `kvasir metrics`
 
 Kennzahlen aus `workflow/metrics.tsv` des Repos (aktuelles Verzeichnis), rein lesend über `gh` oder (Azure-DevOps-Repo, Wahl wie bei `kvasir status`) `az`; Repo aus `origin` oder `--repo owner/repo` (GitHub), Zeitraum `--since 30d` (Standard, nur Tage). Spalten nach Namen: `id`, `art`, `name`, `unit`, `source`, optional `target`/`enabled`.
