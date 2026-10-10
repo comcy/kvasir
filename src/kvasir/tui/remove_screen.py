@@ -10,7 +10,7 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Input, Static
 
-from kvasir import notes
+from kvasir import daylog, notes
 from kvasir import remove_worktree as rw
 from kvasir.worktrees import Worktree
 
@@ -114,6 +114,7 @@ class RemoveScreen(ModalScreen[bool]):
             self.phase = "blocked"
             return
         self.changed = True
+        daylog.record({"type": "worktree_removed", "url": self.url, "branch": self.wt.branch or self.wt.path.name})
         base = rw.default_branch(self.root)
         if self.wt.branch and base and rw.is_merged(self.root, self.wt.branch, base):
             self.phase = "branch"

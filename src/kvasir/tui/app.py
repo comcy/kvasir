@@ -14,7 +14,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.timer import Timer
 from textual.widgets import Footer, OptionList, Static
 
-from kvasir import notes
+from kvasir import daylog, notes
 from kvasir.config import RepoConfig, load_local, load_repos
 from kvasir.new_worktree import is_bare_layout
 from kvasir.open_terminal import OpenTerminalError, open_terminal
@@ -197,6 +197,7 @@ class KvasirApp(App):
 
     def _apply_platform(self) -> None:
         """Rebuild the snapshots from the cache (no network) and redraw."""
+        self._log_snapshot()
         for row in self.rows:
             if row.view and platform_data.platform_of(row.url):
                 patterns = patterns_for(row.url)
@@ -205,6 +206,12 @@ class KvasirApp(App):
         self.query_one(RepoList).set_platform(
             {u: (platform_view.repo_line(s), s.error is not None) for u, s in self.platform.items()})
         self._show_entries(self.query_one(RepoList).highlighted, self.query_one(EntryList).current_entry() or 0)
+
+    def _log_snapshot(self) -> None:
+        daylog.snapshot({r.url: r.view.worktrees for r in self.rows if r.view})
+
+    def on_unmount(self) -> None:
+        self._log_snapshot()
 
     def action_overview(self) -> None:
         from kvasir.tui.overview_screen import OverviewScreen
@@ -326,6 +333,8 @@ class KvasirApp(App):
 
         def done(path: Path | None) -> None:
             if path:
+                daylog.record({"type": "worktree_created", "url": row.url,
+                               "branch": path.relative_to(row.path).as_posix()})
                 self._mark = (row.url, path)
                 self.action_reload()
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
+from kvasir import daylog
 from kvasir.config import config_dir
 
 KINDS = ("note", "closing")
@@ -16,6 +17,7 @@ def add(url: str, branch: str, text: str, kind: str = "note") -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    daylog.record({"type": "closing_note" if kind == "closing" else "note", "url": url, "branch": branch, "text": text})
 
 
 def read_all() -> list[dict]:
