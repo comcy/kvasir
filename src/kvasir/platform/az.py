@@ -268,6 +268,8 @@ class Azure:
             state_reason=None if state not in _CLOSED else "not_planned" if state == "removed" else "completed",
             labels=tuple(t.strip() for t in (f.get("System.Tags") or "").split(";") if t.strip()),
             schedule=Schedule((Deadline(due, it or "Fällig"),) if due else (), von, bis, notes),
+            prio=p if (p := f.get("Microsoft.VSTS.Common.Priority")) in (1, 2, 3, 4) else None,
+            sub_count=sum(r.get("rel") == "System.LinkTypes.Hierarchy-Forward" for r in d.get("relations") or ()),
         )
 
     def item(self, number: int) -> Result[Item]:

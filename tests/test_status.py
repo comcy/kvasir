@@ -111,7 +111,8 @@ def test_json_model_is_stable(real13):
     assert [s["number"] for s in d["sub_issues"]] == [16, 17, 18, 19, 20, 33, 34]
     s20 = d["sub_issues"][4]
     assert list(s20) == ["number", "title", "state", "state_reason", "labels", "status", "status_source", "reason",
-                         "hint", "schedule", "notices", "blocked_by", "stepper"]
+                         "hint", "schedule", "notices", "blocked_by", "parent", "children", "prio", "succ", "prev",
+                         "stepper"]
     assert s20["status"] == "done" and s20["status_source"] == "fact" and s20["hint"] is None
     assert s20["blocked_by"] == [{"repo": "comcy/comcy.github.io", "number": 17, "state": "closed"},
                                  {"repo": "comcy/comcy.github.io", "number": 19, "state": "closed"}]
