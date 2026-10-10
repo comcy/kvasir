@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -137,13 +138,15 @@ def parse_run(d: dict) -> PipelineRun:
 
 def parse_item(d: dict) -> Item:
     """REST issue (`gh api repos/o/r/issues/N`, sub_issues, blocked_by entries)."""
+    labels = tuple(label["name"] for label in d.get("labels") or ())
     return Item(
         repo=d["repository_url"].split("/repos/", 1)[1], number=d["number"], title=d["title"],
-        state=d["state"], state_reason=d.get("state_reason"),
-        labels=tuple(label["name"] for label in d.get("labels") or ()),
+        state=d["state"], state_reason=d.get("state_reason"), labels=labels,
         schedule=schedule.parse(d.get("body"), d.get("milestone")),
         closed_at=(d.get("closed_at") or "")[:10] or None,
         parent=int(d["parent_issue_url"].rsplit("/", 1)[1]) if d.get("parent_issue_url") else None,
+        prio=next((int(m[1]) for x in labels if (m := re.fullmatch(r"prio:([1-4])", x))), None),
+        sub_count=(d.get("sub_issues_summary") or {}).get("total", 0),
     )
 
 

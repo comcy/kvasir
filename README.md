@@ -140,11 +140,18 @@ Pro Repo festgelegt (Platzhalter: `{type}`, `{id}`, `{slug}`, `{date}`):
 
 Ein neuer Branch ist gültig, wenn er mindestens eine Vorlage trifft. Ein Verstoß ist nur eine Warnung.
 
-## `kvasir status #<nr>`
+## `kvasir status [#<nr>]`
 
-Sub-Issues, `blocked_by`-Beziehungen und Status eines GitHub-Issues, rein lesend über `gh`. Repo aus `origin` des aktuellen Ordners oder `--repo owner/repo`; `--format json` für die maschinenlesbare Fassung.
+Sub-Issues (beliebig tief), `blocked_by`-Beziehungen, Prio und Status eines GitHub-Issues oder Azure-Work-Items, rein lesend über `gh`/`az`. Repo aus `origin` des aktuellen Ordners oder `--repo owner/repo`; `--format json` für die maschinenlesbare Fassung. Ohne Nummer: alle offenen Features (offene Issues mit Sub-Issues, selbst kein Sub-Issue; nur GitHub, erste 100 offene Issues) als Bäume, ab 10 Features eine Warnung auf stderr, `--limit N` begrenzt.
 
-Standardausgabe ist eine Tabelle (`--format table`): Ticket (rechtsbündig), Titel (bei schmalem Terminal mit `…` gekürzt), Status und Fortschritt. Status-Symbole bleiben ohne Farbe lesbar (`NO_COLOR`): `✓` erledigt, `◐` in Review, `▶` in Arbeit, `⛔` blockiert, `○` offen, `✗` verworfen. Fortschritt ist eine Punktleiste über die Schritte plus der aktuelle Schritt, z. B. `●●●○○ Abnahme` (beim Feature die Phasen; ein geschlossenes Feature zeigt alle Phasen erledigt, `●●●●● fertig`). Hinweise (Blocker, Termine, Label-Widerspruch, Vorgänger) stehen als Block `Hinweise` unter der Tabelle. `--format text` liefert die frühere Zeilenausgabe, `--format json` die unveränderte maschinenlesbare Fassung.
+Standardausgabe ist eine Tabelle (`--format table`). `--layout tree` (Standard): Ticketnummer (auf gleiche Breite, dann zwei Leerzeichen) und Titel in einer Spalte, der Titel mit der Hierarchie eingerückt (`├─`, `└─`, `│`). `--layout split`: Ticket und Titel getrennt, Titel ohne Einrückung. Titel wird bei schmalem Terminal mit `…` gekürzt. Spalten:
+
+- **Prio:** `P1` bis `P4` aus Label `prio:1` bis `prio:4` (GitHub) bzw. Feld Priority (Azure), sonst `–`.
+- **Status:** Symbole bleiben ohne Farbe lesbar (`NO_COLOR`): `✓` erledigt, `◐` in Review, `▶` in Arbeit, `⛔` blockiert, `○` offen, `✗` verworfen. `▶ startklar` trägt ein Ticket ohne Sub-Issues, offenen Blocker und begonnene Arbeit (der JSON-Status bleibt `open`).
+- **Fortschritt:** Punktleiste über die Schritte plus der aktuelle Schritt, z. B. `●●●○○ Abnahme` (beim Feature die Phasen; ein geschlossenes Feature zeigt alle Phasen erledigt, `●●●●● fertig`).
+- **Vorher** (`prev`): je Blocker `#3 ✓` (geschlossen) oder `#9 ○ offen` (rot). **Nachher** (`succ`): Umkehrung, nur innerhalb des gezeigten Features. Beziehungen nach außerhalb des gezeigten Features tragen `↗` (Blocker anderer Repos als `owner/repo#9`).
+
+Reihenfolge je Ebene: Vorgänger vor Nachfolger (Zyklen brechen bei der kleinsten Nummer), dann Prio (ohne Prio zuletzt), dann Nummer. Hinweise (Termine, Label-Widerspruch) stehen als Block `Hinweise` unter der Tabelle. `--format text` liefert die frühere Zeilenausgabe; `--format json` zusätzlich `parent`, `children`, `prev`, `succ`, `prio` je Item (ohne Nummer: `{"features": [...]}`).
 
 Status aus Tatsachen, in dieser Reihenfolge: geschlossen = erledigt (Grund "nicht geplant" oder Label `wontfix` = verworfen), offener Blocker = blockiert, offener PR (nicht Draft) = in Review, Draft-PR oder Branch mit der Issue-Nummer im Namen = in Arbeit, sonst offen. Ein `status:*`-Label widerspricht nur als Hinweis (`! Label sagt in-review, PR #7 ist Draft`); es ersetzt den Status nur dort, wo keine Tatsache vorliegt, und ist dann mit "(laut Label)" gekennzeichnet. Grenzen: höchstens 100 Sub-Issues, Blocker und offene PRs; Branch-Treffer über die Nummer als eigenes Namensstück (`feat/5-x`, nicht `feat/15-x`).
 

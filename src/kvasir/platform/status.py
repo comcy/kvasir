@@ -78,24 +78,60 @@ def _with_stepper(st: ItemStatus, feature: bool, subs: list[Item], prs: list[Pul
     return replace(st, stepper=feature_stepper(f, prev, phases) if feature else ticket_stepper(f, prev))
 
 
+def _descendants(gh: GitHub | Azure, root: Item) -> Result[list[Item]]:
+    """Alle Sub-Issues unter root, Tiefensuche in API-Reihenfolge, `parent` gesetzt. Zyklensicher.
+    Das Root fragt immer; tiefer nur, wo `sub_count` Kinder meldet."""
+    out: list[Item] = []
+    seen = {root.number}
+
+    def walk(it: Item, always: bool) -> Result | None:
+        kids = gh.sub_issues(it.number) if always or it.sub_count else Result(data=[])
+        if not kids.ok:
+            return kids
+        for k in kids.data:
+            if k.number not in seen:
+                seen.add(k.number)
+                out.append(replace(k, parent=it.number))
+                if (err := walk(out[-1], False)) is not None:
+                    return err
+        return None
+
+    err = walk(root, True)
+    return err if err is not None else Result(data=out)
+
+
 def issue_status(gh: GitHub | Azure, number: int, phases: Phases = PHASES) -> Result[IssueStatus]:
-    """Issue + sub-issues, each with blockers and status. First failing gh call ends it with its Error."""
+    """Issue + alle Sub-Issues (beliebig tief), je mit Blockern und Status. Der erste fehlgeschlagene Aufruf beendet mit seinem Error."""
     root = gh.item(number)
     if not root.ok:
         return root
-    subs = gh.sub_issues(number)
+    subs = _descendants(gh, root.data)
     prs = gh.pull_requests(limit=100, state="all") if subs.ok else subs
     branches = gh.branch_names() if prs.ok else prs
     for r in (subs, prs, branches):
         if not r.ok:
             return r
+    direct = [x for x in subs.data if x.parent == number]
     out = []
     for it in [root.data, *subs.data]:
         bl = gh.blocked_by(it.number)
         if not bl.ok:
             return bl
         live = [p for p in prs.data if p.state in ("open", "draft")]
-        feature = it is root.data and bool(subs.data)
-        out.append(_with_stepper(derive(it, bl.data, live, branches.data), feature, subs.data, prs.data,
-                                 branches.data, phases))
+        feature = it is root.data and bool(direct)
+        st = _with_stepper(derive(it, bl.data, live, branches.data), feature, direct, prs.data, branches.data, phases)
+        out.append(replace(st, children=tuple(x.number for x in subs.data if x.parent == it.number)))
+    out = [replace(st, succ=tuple(sorted(o.item.number for o in out
+                                         if (gh.slug, st.item.number) in {(b.repo, b.number) for b in o.blocked_by})))
+           for st in out]
     return Result(data=IssueStatus(gh.slug, out[0], tuple(out[1:])))
+
+
+def open_features(gh: GitHub) -> Result[list[int]]:
+    """Offene Features = offene Issues mit Sub-Issues, die selbst kein Sub-Issue sind. Prio, dann Nummer.
+    # ponytail: erste 100 offene Issues, kein Paging"""
+    res = gh.issues("open")
+    if not res.ok:
+        return res
+    feats = sorted((i for i in res.data if i.sub_count and i.parent is None), key=lambda i: (i.prio or 9, i.number))
+    return Result(data=[i.number for i in feats])

@@ -117,6 +117,8 @@ class Item:
     schedule: Schedule = Schedule()
     closed_at: str | None = None  # ISO date
     parent: int | None = None  # number of the parent issue (same repo)
+    prio: int | None = None  # 1..4: Label `prio:N` (GitHub) / Feld Priority (Azure); sonst None
+    sub_count: int = 0  # Zahl der Sub-Issues (spart den Aufruf bei Blättern)
 
 
 @dataclass(frozen=True)
@@ -144,13 +146,15 @@ class ItemStatus:
     hint: str | None = None  # a status:* label that contradicts the fact status
     notices: tuple[str, ...] = ()  # Termin-Hinweise (unlesbare Zeile, Konflikte); keine Bewertung
     stepper: Stepper | None = None
+    children: tuple[int, ...] = ()  # Nummern der Sub-Issues im gezeigten Satz
+    succ: tuple[int, ...] = ()  # was dieses Item blockiert, nur im gezeigten Satz
 
 
 @dataclass(frozen=True)
 class IssueStatus:
     repo: str
     issue: ItemStatus
-    sub_issues: tuple[ItemStatus, ...]
+    sub_issues: tuple[ItemStatus, ...]  # alle Nachkommen, Tiefensuche in API-Reihenfolge
 
 
 class Provider(Protocol):

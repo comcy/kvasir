@@ -24,7 +24,7 @@ from kvasir.config import (
 from kvasir.gitinfo import repo_info
 from kvasir.platform import GitHub, PlatformRepo, detect_platform, provider_for
 from kvasir.platform.graph import WARN_NODES, issue_graph
-from kvasir.platform.status import issue_status
+from kvasir.platform.status import issue_status, open_features
 from kvasir.platform.stepper import check_detector
 from kvasir.repo_settings import PRESETS, preset_key, update_repo, validate_patterns
 from kvasir.repo_url import normalize
@@ -277,6 +277,8 @@ def _item_json(s) -> dict:
             "labels": list(i.labels), "status": s.status, "status_source": s.source, "reason": s.reason,
             "hint": s.hint, "schedule": _schedule_json(i.schedule), "notices": list(s.notices),
             "blocked_by": [{"repo": b.repo, "number": b.number, "state": b.state} for b in s.blocked_by],
+            "parent": i.parent, "children": list(s.children), "prio": i.prio, "succ": list(s.succ),
+            "prev": [{"repo": b.repo, "number": b.number, "state": b.state} for b in s.blocked_by],
             **({"stepper": _stepper_json(s.stepper)} if s.stepper else {})}
 
 
@@ -301,15 +303,26 @@ def _item_text(s, indent: str) -> list[str]:
     return lines
 
 
+FEATURE_WARN = 10
+
+
+def _status_json(st) -> dict:
+    return {"repo": st.repo, "issue": _item_json(st.issue), "sub_issues": [_item_json(s) for s in st.sub_issues]}
+
+
 @app.command()
 def status(
-    issue: Annotated[str, typer.Argument(help="Issue number, e.g. #13")],
+    issue: Annotated[str | None, typer.Argument(help="Issue number, e.g. #13; without: all open features")] = None,
     repo: Annotated[str | None, typer.Option(help="owner/repo (default: origin of the current directory)")] = None,
     format: Annotated[str, typer.Option(help="table | text | json")] = "table",
+    layout: Annotated[str, typer.Option(help="tree | split (table only)")] = "tree",
+    limit: Annotated[int | None, typer.Option(help="without issue: show at most N features")] = None,
 ) -> None:
-    """Sub-issues, blockers and status (from facts) of a GitHub issue or Azure DevOps work item. Read-only."""
-    if format not in ("table", "text", "json") or not issue.lstrip("#").isdigit():
-        typer.echo("usage: kvasir status #<nr> [--repo owner/repo] [--format table|text|json]", err=True)
+    """Sub-issue tree, blockers (prev/succ), priority and status (from facts) of a GitHub issue or Azure DevOps work item. Read-only."""
+    if format not in ("table", "text", "json") or layout not in ("tree", "split") or (
+            issue is not None and not issue.lstrip("#").isdigit()):
+        typer.echo("usage: kvasir status [#<nr>] [--repo owner/repo] [--format table|text|json] "
+                   "[--layout tree|split] [--limit N]", err=True)
         raise typer.Exit(2)
     if repo is None:
         try:
@@ -322,23 +335,42 @@ def status(
     else:
         pr = PlatformRepo("github", repo)
     phases = repo_file.load_phases(repo_file.checkout_root(Path.cwd()))
-    res = issue_status(provider_for(pr), int(issue.lstrip("#")), phases)
-    if not res.ok:
-        typer.echo(f"{res.error.kind.value}: {res.error.message}", err=True)
-        raise typer.Exit(1)
-    st = res.data
+    gh = provider_for(pr)
+    if issue is not None:
+        numbers = [int(issue.lstrip("#"))]
+    else:
+        if not hasattr(gh, "issues"):
+            typer.echo("without an issue number only GitHub is supported", err=True)
+            raise typer.Exit(2)
+        feats = open_features(gh)
+        if not feats.ok:
+            typer.echo(f"{feats.error.kind.value}: {feats.error.message}", err=True)
+            raise typer.Exit(1)
+        numbers = feats.data
+        if limit is None and len(numbers) >= FEATURE_WARN:
+            typer.echo(f"Warnung: {len(numbers)} offene Features; mit --limit N begrenzen", err=True)
+        numbers = numbers[:limit]
+    sts = []
+    for n in numbers:  # ponytail: je Feature eigene Aufrufe; geteilte PR-/Branch-Abfrage erst bei Bedarf
+        res = issue_status(gh, n, phases)
+        if not res.ok:
+            typer.echo(f"{res.error.kind.value}: {res.error.message}", err=True)
+            raise typer.Exit(1)
+        sts.append(res.data)
     if format == "json":
-        typer.echo(json.dumps({"repo": st.repo, "issue": _item_json(st.issue),
-                               "sub_issues": [_item_json(s) for s in st.sub_issues]}, ensure_ascii=False, indent=2))
+        data = _status_json(sts[0]) if issue is not None else {"features": [_status_json(x) for x in sts]}
+        typer.echo(json.dumps(data, ensure_ascii=False, indent=2))
         return
     if format == "table":
-        typer.echo(render(st))
+        typer.echo("\n\n".join(render(x, layout) for x in sts) or "keine offenen Features")
         return
-    lines = _item_text(st.issue, "")
-    if st.sub_issues:
-        lines.append("Sub-Issues:")
-        for s in st.sub_issues:
-            lines += _item_text(s, "  ")
+    lines = []
+    for st in sts:
+        lines += _item_text(st.issue, "")
+        if st.sub_issues:
+            lines.append("Sub-Issues:")
+            for s in st.sub_issues:
+                lines += _item_text(s, "  ")
     typer.echo("\n".join(lines))
 
 

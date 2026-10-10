@@ -24,20 +24,20 @@ def test_default_is_table_text_is_old_lines_json_unchanged(monkeypatch, tmp_path
     cwd_with(tmp_path, monkeypatch)
     ticket(monkeypatch)
     out = table(monkeypatch)
-    assert out.splitlines()[0].split() == ["Ticket", "Titel", "Status", "Fortschritt"]
+    assert out.splitlines()[0].split() == ["Ticket", "Titel", "Prio", "Status", "Fortschritt", "Vorher", "Nachher"]
     old = runner.invoke(app, [*ARGS, "--format", "text"]).output
     assert old.startswith("#1 [offen] T1") and "Schritte: [>] Branch" in old
     d = json.loads(runner.invoke(app, [*ARGS, "--format", "json"]).output)
     assert list(d) == ["repo", "issue", "sub_issues"]
     assert list(d["sub_issues"][0]) == ["number", "title", "state", "state_reason", "labels", "status",
                                         "status_source", "reason", "hint", "schedule", "notices", "blocked_by",
-                                        "stepper"]
+                                        "parent", "children", "prio", "succ", "prev", "stepper"]
 
 
 def test_progress_start(monkeypatch, tmp_path):
     cwd_with(tmp_path, monkeypatch)
     ticket(monkeypatch)
-    assert "○ offen" in row(table(monkeypatch), 5) and "○○○○○ Branch" in row(table(monkeypatch), 5)
+    assert "▶ startklar" in row(table(monkeypatch), 5) and "○○○○○ Branch" in row(table(monkeypatch), 5)
 
 
 def test_progress_middle(monkeypatch, tmp_path):
@@ -88,7 +88,7 @@ def test_two_spaces_between_number_and_title_and_equal_width(monkeypatch, tmp_pa
         "repos/o/r/issues/123/dependencies/blocked_by": "[]",
         "pr list": "[]", "repos/o/r/branches": "",
     })
-    out = table(monkeypatch)
+    out = table(monkeypatch, args=[*ARGS, "--layout", "split"])
     lines = [row(out, 1), row(out, 5), row(out, 123)]
     assert all(x.lstrip().split("  ")[0].startswith("#") for x in lines)  # >= 2 Leerzeichen nach der Nummer
     assert len({x.index("Feature" if "Feature" in x else "Unterticket" if "Unterticket" in x else "Lang")
@@ -98,9 +98,9 @@ def test_two_spaces_between_number_and_title_and_equal_width(monkeypatch, tmp_pa
 def test_narrow_terminal_truncates_title_with_ellipsis(monkeypatch, tmp_path):
     cwd_with(tmp_path, monkeypatch)
     scenario(monkeypatch, issue(5, title="Ein sehr langer Titel der nicht in die Zeile passt"))
-    out = table(monkeypatch, cols=60)
+    out = table(monkeypatch, cols=80)
     assert "…" in row(out, 5)
-    assert all(len(line) <= 60 for line in out.splitlines())
+    assert all(len(line) <= 80 for line in out.splitlines())
     assert "Fortschritt" in out.splitlines()[0]  # andere Spalten bleiben ganz
 
 
@@ -117,7 +117,7 @@ def test_blockers_and_deadline_in_block(monkeypatch, tmp_path):
     cwd_with(tmp_path, monkeypatch)
     scenario(monkeypatch, issue(5, body="Frist: 2026-12-31"), blockers=[issue(9)])
     out = table(monkeypatch)
-    assert "#5" in out and "blockiert von: #9 (open)" in out and "Frist: 2026-12-31" in out
+    assert "#5" in out and "↗ #9 ○ offen" in out and "Frist: 2026-12-31" in out
 
 
 def test_no_color_stays_readable(monkeypatch, tmp_path):
