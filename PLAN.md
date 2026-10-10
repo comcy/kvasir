@@ -1,10 +1,10 @@
 # kvasir – Plan
 
-Stand: 2026-10-10 (Neustart auf `main`; Worktree-Tool, Plattform-Informationen und Sichtbarkeit/Kennzahlen umgesetzt). Der alte Stand liegt in `archive/v0-mimirlink`.
+Stand: 2026-10-11 (Neustart auf `main`; Worktree-Tool, Plattform-Informationen, Sichtbarkeit/Kennzahlen, Tagesbericht und optionale LLM-Funktionen umgesetzt). Der alte Stand liegt in `archive/v0-mimirlink`.
 
 ## Ziel
 
-Terminal-Tool für **Git-Worktrees**: Überblick über mehrere Repos, schnelles Wechseln, schnelles Anlegen, sicheres Aufräumen. Später: Tagesauswertung („woran gearbeitet“) in das Obsidian-Vault-Journal (nicht Teil der ersten Version).
+Terminal-Tool für **Git-Worktrees**: Überblick über mehrere Repos, schnelles Wechseln, schnelles Anlegen, sicheres Aufräumen. Dazu ein Tagesbericht („woran gearbeitet“), optional in eine Markdown-Datei (z. B. Obsidian-Journal) abgelegt, und optionale LLM-Funktionen.
 
 **Seit 2026-10-07 zusätzlich: Sichtbarkeit, Prozessstand und Kennzahlen** (Issue #48, #70). kvasir ist dafür der deterministische, rein lesende „Motor“ (CLI mit JSON-Ausgabe, TUI-Panel als Verbraucher). Ursprung und Entscheidungen liegen im Repo `comcy/comcy.github.io` (Issue #28, `docs/workflow.md`, Abschnitt „Sichtbarkeit und Prozessstand“); die Umsetzung hier stammt nicht aus der Worktree-Planung oben und ist dort führend.
 
@@ -36,7 +36,7 @@ Terminal-Tool für **Git-Worktrees**: Überblick über mehrere Repos, schnelles 
 6. Fetch-Intervall + manuelles Pull
 7. Notizen
 
-Danach: Tagesauswertung → Vault (`vault_path`), Metriken.
+Danach: Tagesbericht und LLM-Funktionen (siehe unten), Metriken.
 
 ## Umsetzung: GitHub Issues
 
@@ -89,6 +89,31 @@ Rein lesend, ohne Modell, über `gh`/`az`. Quelle der Entscheidungen: `comcy/com
 
 Grenzen (gewollt): kein Schreiben in den Tracker; ohne Termine keine erfundene Zeit; Azure-DevOps-Teil nur gegen Fakes getestet.
 
+## Tagesbericht (#84, #85, #86)
+
+kvasir ist agnostisch: es erzeugt einen Bericht, führt aber kein eigenes Journal. Ablage ist reine Datei-/Markdown-Konfiguration.
+
+| Teil | Inhalt | Issue |
+|---|---|---|
+| Tageslog | `<config>/days/YYYY-MM-DD.ndjson`: Worktree angelegt/entfernt, Notizen, PR-/Issue-Statuswechsel, Snapshot uncommitteter Arbeit; geschrieben bei Aktionen, Plattform-Refresh und TUI-Ende (kein Dienst) | #84 |
+| `kvasir today` | Bericht je Tag (`--date`, `--format md\|json`, `--out`, `--stdout`): Commits aus `git log` (nachträglich für jeden Tag), Log-Ereignisse, Snapshot | #85 |
+| `[report]` | `local.toml`: `output` (`{date}`), `mode` (`append-section`, `replace-section`, `overwrite`), `heading`; JSON geht nie in die konfigurierte Datei | #86 |
+
+Entscheidungen: Kalendertag (lokal); Commits werden nicht gespeichert; nur ausdrücklicher Aufruf schreibt, nie automatisch ins Vault.
+
+## LLM-Funktionen (optional, #87–#90)
+
+Ohne `[llm]` in `local.toml` ist alles ausgeblendet. kvasir speichert keine Tokens.
+
+| Teil | Inhalt | Issue |
+|---|---|---|
+| Client | Provider `openai` (OpenAI-kompatibel: Ollama, vLLM, LM Studio; Key per Env-Variable) und `command` (z. B. `claude -p`); `doctor`-Check; einmalige Bestätigung für nicht-lokale Endpunkte; Opt-out je Repo (`llm = false`) | #87 |
+| Zusammenfassung | Taste `s`, je Repo, gecacht per HEAD-Hash | #88 |
+| Prompt-Fenster | Taste `a`: Chat mit deterministischer Repo-Suche (`git grep`, `git log`), Notizen, Tageslog | #89 |
+| Vorschläge | `c` Commit-Message (nach Rückfrage `git commit`), `t` Notiz; kein Agent | #90 |
+
+Grenzen: `.env`-Dateien nie als Kontext; kein autonomer Agent, kein Tool-Calling; nicht gegen echte Modelle getestet (Ollama/vLLM/`claude -p`); Gemini-Kompatibilität ungeprüft.
+
 ## Teststrategie
 
 Pro Abschnitt ein Test gegen ein Wegwerf-Repo (`tempfile`, echtes `git`). Windows-Verhalten (`wt.exe`, Pfade) prüft der Nutzer manuell.
@@ -99,7 +124,8 @@ Pro Abschnitt ein Test gegen ein Wegwerf-Repo (`tempfile`, echtes `git`). Window
 - **Azure DevOps live prüfen** (#26): Provider, `status`, `metrics` nur gegen Dokumentation/Fakes getestet; Checkliste als Kommentar an #26.
 - **Board-Status live prüfen:** `projectItems` mit echtem Projekt-Board nur über Fixtures getestet (Token braucht `read:project`).
 - **`kvasir status` ohne Argument** (#80, `needs-triage`): Spaltenbreiten (Titel zuerst), ruhigere Übersicht, erledigte Teilbäume ausblenden.
-- **Tagesauswertung → Vault-Journal** („woran gearbeitet“): noch kein Issue, `vault_path` noch nicht konfigurierbar. Vorher grillen.
+- **Tagesbericht und LLM live prüfen:** `kvasir today`, `[report]`, `s`/`a`/`c`/`t` nur gegen Fakes getestet; Windows ungeprüft. Optional später: Snapshot per Cron/Task Scheduler (`kvasir snapshot`), wenn Tage ohne kvasir-Nutzung fehlen.
+- **LLM-Nachbesserungen:** Commit-Message nur einzeilig; Suche nur auf dem committeten HEAD; naive Schlagwortsuche; Tageslog-Snapshot ohne Sperre bei zwei gleichzeitigen Instanzen; Einstieg für Vorschläge aus dem Prompt-Fenster fehlt.
 - **Kleinigkeiten:** Abschlussnotiz wird vor `git worktree remove` gespeichert (bleibt stehen, wenn Git ablehnt); SSH-Passphrase-Abfrage kann Fetch bis zum Timeout blockieren; `setup`-URL-Erkennung bei Tippfehler im Pfad; `{date}` prüft nur das Format; `webbrowser.open` im UI-Thread; `gh api user` pro Refresh; `doctor`-Hilfetext nennt `az` nicht; Hinweis bei `credential.helper store`.
 - `setup --convert` (normalen Clone ins Bare-Layout umbauen), später.
 - Konfiguration liegt lokal (`~/.config/kvasir/` bzw. `%APPDATA%\kvasir`), kein Dotfiles-Repo; `repos.toml` ist bei Bedarf synchronisierbar.
