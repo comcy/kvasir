@@ -10,13 +10,15 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from statistics import median
 
-from kvasir.platform import GitHub, Result
+from kvasir.platform import Azure, GitHub, Result
+from kvasir.platform.az import _CLOSED as AZ_CLOSED
 
 METRICS_TSV = Path("workflow") / "metrics.tsv"
 ARTEN = ("in_arbeit", "in_review", "geschlossen", "pr_erstellt", "pr_gemergt", "ci_rot", "ci_gruen")
 MIN_N = 3
 UNIT_SECONDS = {"h": 3600, "d": 86400}
 IN_ARBEIT_LABEL = "status:in-progress"  # ponytail: fest; später aus workflow/states.tsv
+IN_REVIEW_LABEL = "status:in-review"  # bei Azure DevOps steht der Status in System.Tags, gleiche Namen
 
 
 @dataclass(frozen=True)
@@ -43,7 +45,8 @@ def parse_since(s: str) -> timedelta:
 
 
 def _time(s: str) -> datetime:
-    return datetime.fromisoformat(s)
+    t = datetime.fromisoformat(s)
+    return t if t.tzinfo else t.replace(tzinfo=UTC)
 
 
 def github_events(item: int, timeline: list[dict]) -> list[Event]:
@@ -52,15 +55,82 @@ def github_events(item: int, timeline: list[dict]) -> list[Event]:
     for e in timeline:
         if e.get("event") == "labeled" and (e.get("label") or {}).get("name") == IN_ARBEIT_LABEL:
             out.append(Event(item, "in_arbeit", _time(e["created_at"])))
+        elif e.get("event") == "labeled" and (e.get("label") or {}).get("name") == IN_REVIEW_LABEL:
+            out.append(Event(item, "in_review", _time(e["created_at"])))
         elif e.get("event") == "closed":
             out.append(Event(item, "geschlossen", _time(e["created_at"])))
     return out
 
 
-def events(gh: GitHub, since: datetime, srcs: set[str]) -> Result[list[Event]]:
+def azure_events(item: int, revisions: list[dict]) -> list[Event]:
+    """Work-Item-Revisionen -> Ereignisse beim Wechsel: Tag `status:in-progress`/`status:in-review` neu (Tags `;`-getrennt),
+    Zustand in einen geschlossenen Zustand. Form UNVERIFIZIERT: tolerant (fehlende Felder erben von der Vorrevision,
+    Revisionen ohne `System.ChangedDate` zählen nicht)."""
+    out, tags, closed = [], set(), False
+    for r in sorted((r for r in revisions if isinstance(r, dict)), key=lambda r: r.get("rev") or 0):
+        f = r.get("fields") or {}
+        if "System.Tags" in f:
+            new = {t.strip().lower() for t in (f["System.Tags"] or "").split(";") if t.strip()}
+        else:
+            new = tags
+        now_closed = (f["System.State"] or "").lower() in AZ_CLOSED if "System.State" in f else closed
+        when = f.get("System.ChangedDate") or r.get("changedDate")
+        if when:
+            for label, art in ((IN_ARBEIT_LABEL, "in_arbeit"), (IN_REVIEW_LABEL, "in_review")):
+                if label in new - tags:
+                    out.append(Event(item, art, _time(when)))
+            if now_closed and not closed:
+                out.append(Event(item, "geschlossen", _time(when)))
+        tags, closed = new, now_closed
+    return out
+
+
+def azure_ticket_events(az: Azure, since: datetime) -> Result[list[Event]]:
+    """Ereignisse der seit `since` geschlossenen Work Items. # ponytail: eine Revisionsabfrage je Work Item"""
+    ids = az.closed_item_ids(since.date().isoformat())
+    if not ids.ok:
+        return ids
+    out: list[Event] = []
+    for n in ids.data:
+        revs = az.revisions(n)
+        if not revs.ok:
+            return revs
+        evs = azure_events(n, revs.data)
+        if any(e.art == "geschlossen" and e.zeit >= since for e in evs):
+            out += evs
+    return Result(data=out)
+
+
+def azure_pr_ci_events(az: Azure, since: datetime) -> Result[list[Event]]:
+    """Wie `pr_ci_events`: `az repos pr list --status completed` (creationDate, closedDate) und `az pipelines runs list`
+    (reason `pullRequest`, result succeeded/failed, queueTime; PR über `refs/pull/<id>/merge` oder Quell-Branch)."""
+    prs, runs = az.completed_prs(), az.runs()
+    for r in (prs, runs):
+        if not r.ok:
+            return r
+    ps = [(d["pullRequestId"], _time(d["creationDate"]), _time(d.get("closedDate") or d["closeDate"]),
+           (d.get("sourceRefName") or "").removeprefix("refs/heads/"))
+          for d in prs.data if d.get("closedDate") or d.get("closeDate")]
+    rs = []
+    for d in runs.data:
+        art = {"failed": "ci_rot", "succeeded": "ci_gruen"}.get(d.get("result"))
+        if art and d.get("reason") == "pullRequest" and d.get("queueTime"):
+            ref = d.get("sourceBranch") or ""
+            m = re.fullmatch(r"refs/pull/(\d+)/.*", ref)
+            rs.append((art, _time(d["queueTime"]), ref.removeprefix("refs/heads/"), int(m[1]) if m else None))
+    return Result(data=_pr_events(ps, rs, since))
+
+
+def events(gh: GitHub | Azure, since: datetime, srcs: set[str]) -> Result[list[Event]]:
     """Ereignisse der seit `since` geschlossenen Tickets und gemergten PRs, nur für die Quellen `srcs` (aus metrics.tsv).
     # ponytail: erste 100 geschlossene Issues, keine Seiten"""
-    out: list[Event] = []
+    if isinstance(gh, Azure):
+        out = azure_ticket_events(gh, since) if "ticket_cycle_time" in srcs else Result(data=[])
+        if not out.ok or not srcs & {"pr_duration", "ci_red_before_merge"}:
+            return out
+        pr = azure_pr_ci_events(gh, since)
+        return pr if not pr.ok else Result(data=out.data + pr.data)
+    out = []
     res = gh.issues("closed") if "ticket_cycle_time" in srcs else Result(data=[])
     if not res.ok:
         return res
@@ -88,18 +158,23 @@ def pr_ci_events(gh: GitHub, since: datetime) -> Result[list[Event]]:
     runs = gh.runs_since((since - timedelta(days=1)).date().isoformat())  # PR kann vor `since` erstellt sein
     if not runs.ok:
         return runs
+    ps = [(p["number"], _time(p["createdAt"]), _time(p["mergedAt"]), p["headRefName"]) for p in prs.data]
+    rs = [(art, _time(r["createdAt"]), r["headBranch"], None) for r in runs.data
+          if (art := {"failure": "ci_rot", "success": "ci_gruen"}.get(r.get("conclusion"))) and r.get("event") == "pull_request"]
+    return Result(data=_pr_events(ps, rs, since))
+
+
+def _pr_events(prs: list[tuple[int, datetime, datetime, str]], runs: list[tuple[str, datetime, str, int | None]],
+               since: datetime) -> list[Event]:
+    """prs: (Nummer, erstellt, gemergt, Branch); runs: (Art, Zeit, Branch, PR-Nummer oder None = per Branch zuordnen)."""
     out: list[Event] = []
-    for p in prs.data:
-        created, merged = _time(p["createdAt"]), _time(p["mergedAt"])
+    for n, created, merged, branch in prs:
         if merged < since:
             continue
-        out += [Event(p["number"], "pr_erstellt", created), Event(p["number"], "pr_gemergt", merged)]
-        for r in runs.data:
-            art = {"failure": "ci_rot", "success": "ci_gruen"}.get(r.get("conclusion"))
-            if art and r.get("event") == "pull_request" and r.get("headBranch") == p["headRefName"] \
-                    and created <= _time(r["createdAt"]) <= merged:
-                out.append(Event(p["number"], art, _time(r["createdAt"])))
-    return Result(data=out)
+        out += [Event(n, "pr_erstellt", created), Event(n, "pr_gemergt", merged)]
+        out += [Event(n, art, when) for art, when, b, pn in runs
+                if (pn == n if pn else b == branch) and created <= when <= merged]
+    return out
 
 
 def pr_seconds(evs: list[Event]) -> list[float]:
@@ -131,18 +206,21 @@ def cycle_seconds(evs: list[Event]) -> list[float]:
 
 # --- eval_pass_rate: lokale Berichte, keine Plattform ---
 EVALS_DIR = Path("evals") / "reports"
+ANMERKUNG = "## Anmerkung (nachträglich)"
 
 
 def eval_results(reports: Path) -> list[bool]:
-    """Je Aufgabe des neuesten Berichts (`*.md`, Name = Zeitstempel): bestanden?. `nicht prüfbar` zählt nicht.
+    """Je Aufgabe des neuesten Berichts (`*.md`, Name = Zeitstempel) ohne Abschnitt `## Anmerkung (nachträglich)`: bestanden?.
+    `nicht prüfbar` zählt nicht.
 
     Spalten nach Namen (`Aufgabe`, `Ergebnis`), daher auch das Altformat ohne Kosten-Spalte.
     """
     files = sorted(reports.glob("*.md")) if reports.is_dir() else []
-    if not files:
+    texts = [t for f in files if ANMERKUNG not in (t := f.read_text(encoding="utf-8"))]  # nachträglich entwertet
+    if not texts:
         return []
     head, out = [], []
-    for line in files[-1].read_text(encoding="utf-8").splitlines():
+    for line in texts[-1].splitlines():
         if not line.startswith("|"):
             continue
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
