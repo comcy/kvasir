@@ -414,7 +414,7 @@ def metrics(
     repo: Annotated[str | None, typer.Option(help="owner/repo (default: origin of the current directory)")] = None,
     evals: Annotated[Path | None, typer.Option(help="Ordner mit Eval-Berichten (default: evals/reports/ des Checkouts)")] = None,
 ) -> None:
-    """Kennzahlen aus workflow/metrics.tsv (Text). Read-only; GitHub-Tickets und PRs, lokale Eval-Berichte."""
+    """Kennzahlen aus workflow/metrics.tsv (Text). Read-only; GitHub oder Azure DevOps (wie status), lokale Eval-Berichte."""
     try:
         span = metrics_mod.parse_since(since)
     except ValueError as e:
@@ -424,8 +424,8 @@ def metrics(
         pr = PlatformRepo("github", repo) if repo else detect_platform(repo_info(Path.cwd()).remote_url or "")
     except ValueError:
         pr = None
-    if pr is None or pr.kind != "github":
-        typer.echo("no GitHub repo here; pass --repo owner/repo", err=True)
+    if pr is None:
+        typer.echo("no GitHub/Azure DevOps repo here; pass --repo owner/repo", err=True)
         raise typer.Exit(2)
     root = repo_file.checkout_root(Path.cwd())
     try:
@@ -433,10 +433,10 @@ def metrics(
     except OSError as e:
         typer.echo(f"{metrics_mod.METRICS_TSV}: {e.strerror or e}", err=True)
         raise typer.Exit(1) from e
-    gh, since_dt = GitHub(pr.slug), metrics_mod.now() - span
+    gh, since_dt = provider_for(pr), metrics_mod.now() - span
     srcs = {r.get("source") for r in rows}
     res = metrics_mod.events(gh, since_dt, srcs)
-    rework = metrics_mod.rework_counts(gh, since_dt) if "rework_fixes_per_change" in srcs else None
+    rework = metrics_mod.rework_counts(gh, since_dt) if "rework_fixes_per_change" in srcs and isinstance(gh, GitHub) else None  # Azure: unbekannt
     for r in (res, rework):
         if r is not None and not r.ok:
             typer.echo(f"{r.error.kind.value}: {r.error.message}", err=True)

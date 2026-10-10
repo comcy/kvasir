@@ -242,6 +242,41 @@ class Azure:
         except (KeyError, TypeError, AttributeError, ValueError) as e:
             return _unexpected(e)
 
+    # -- metrics (#74): raw, read-only lists; shapes UNVERIFIED (see metrics.azure_*) --
+
+    def _scope(self) -> tuple[str, ...]:
+        return "--organization", self.org_url, "--project", self.project
+
+    def closed_item_ids(self, since: str) -> Result[list[int]]:
+        """Ids of work items in a closed state changed on/after `since` (YYYY-MM-DD), whole project (WIQL)."""
+        states = ", ".join(f"'{s.capitalize()}'" for s in sorted(_CLOSED))
+        wiql = (f"SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND "
+                f"[System.State] IN ({states}) AND [System.ChangedDate] >= '{since}'")
+        res = _json("boards", "query", "--wiql", wiql, *self._scope())
+        try:
+            return Result(data=[int(d["id"]) for d in res.data]) if res.ok else res
+        except (KeyError, TypeError, ValueError) as e:
+            return _unexpected(e)
+
+    def revisions(self, number: int) -> Result[list[dict]]:
+        """Raw revisions of a work item (`System.State`, `System.Tags`, `System.ChangedDate` per revision)."""
+        res = _json("devops", "invoke", "--area", "wit", "--resource", "revisions", "--route-parameters",
+                    f"id={number}", "--api-version", "7.1", "--organization", self.org_url)
+        if not res.ok:
+            return res
+        revs = res.data.get("value") if isinstance(res.data, dict) else res.data
+        return Result(data=revs) if isinstance(revs, list) else _unexpected(TypeError("revisions"))
+
+    def completed_prs(self, limit: int = 200) -> Result[list[dict]]:
+        """Raw completed (merged) PRs of this repo. # ponytail: first `limit`"""
+        return _json("repos", "pr", "list", "--status", "completed", "--repository", self.repo, "--top", str(limit),
+                     *self._scope())
+
+    def runs(self, limit: int = 1000) -> Result[list[dict]]:
+        """Raw pipeline runs of the project, newest first. # ponytail: first `limit`, no date filter in `az`"""
+        return _json("pipelines", "runs", "list", "--query-order", "QueueTimeDesc", "--top", str(limit),
+                     *self._scope())
+
     # -- status (#56): work item relations as sub-issues / blocked_by, read-only --
 
     def _show(self, number: int) -> Result[dict]:
