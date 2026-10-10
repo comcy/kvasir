@@ -9,6 +9,7 @@ import typer
 from kvasir import __version__, repo_file
 from kvasir import doctor as doctor_mod
 from kvasir import metrics as metrics_mod
+from kvasir import report as report_mod
 from kvasir.clone import clone_bare
 from kvasir.config import (
     DEFAULT_FETCH_MINUTES,
@@ -454,3 +455,31 @@ def metrics(
     else:
         for ln in lines:
             typer.echo(f"{ln.name or ln.id}: {ln.text}")
+
+
+@app.command()
+def today(
+    date: Annotated[str | None, typer.Option(help="Tag YYYY-MM-DD (default: heute)")] = None,
+    format: Annotated[str, typer.Option(help="md | json")] = "md",
+    out: Annotated[Path | None, typer.Option(help="Write to file instead of stdout; {date} is replaced")] = None,
+) -> None:
+    """Bericht eines Tages: Commits, Notizen, Statuswechsel, uncommittete Arbeit je Repo. Schreibt nur den Snapshot ins Tageslog und --out."""
+    from datetime import date as date_cls
+    try:
+        day = date_cls.fromisoformat(date) if date else date_cls.today()
+    except ValueError:
+        typer.echo("--date: expected YYYY-MM-DD", err=True)
+        raise typer.Exit(2) from None
+    if format not in ("md", "json"):
+        typer.echo("--format: expected md | json", err=True)
+        raise typer.Exit(2)
+    if day == date_cls.today():
+        report_mod.snapshot_today()
+    rep = report_mod.build(day)
+    text = json.dumps(rep, ensure_ascii=False, indent=2) + "\n" if format == "json" else report_mod.to_markdown(rep)
+    if out:
+        target = Path(str(out).replace("{date}", day.isoformat()))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
+    else:
+        typer.echo(text, nl=False)
