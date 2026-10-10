@@ -240,6 +240,7 @@ Weitere Befehle (`["ollama", "run", "<modell>"]`, `["gemini", "-p"]`) folgen der
 - **Datenschutz:** Vor dem ersten Senden an einen nicht-lokalen Endpunkt (nicht localhost/privates Netz; `command` gilt immer als nicht lokal) ist eine einmalige Bestätigung nötig; sie wird in `[llm] confirmed` in `local.toml` gespeichert. Pro Repo abschaltbar: `llm = false` im Eintrag in `repos.toml`.
 - **`kvasir doctor`** prüft die Config, die Erreichbarkeit (`GET /models` bzw. Befehl im PATH) und das Modell.
 - Fehler (nicht erreichbar, Modell fehlt, Befehl fehlt, Timeout) kommen als Ergebnis zurück, nicht als Exception. Python-API: `kvasir.llm.complete(messages)`.
+- **Vorschläge (Worktree markieren):** `c` schlägt eine Conventional-Commit-Message aus `git diff --staged` vor (leer = Meldung, kein LLM-Aufruf); der Text ist editierbar, `Enter` fragt nach, ein zweites `Enter` führt `git commit -m` im Worktree aus (Autor und Hooks aus der git-Konfig, nie `--no-verify`/`--amend`; Fehler werden angezeigt). `t` schlägt eine Notiz aus Tageslog und `git diff HEAD` vor; `Enter` speichert sie als Notiz des Branches. `Esc` bricht jeweils ab. Diffs sind auf 20000 Zeichen begrenzt, `.env`-Dateien ausgenommen.
 
 ## Konfiguration
 
