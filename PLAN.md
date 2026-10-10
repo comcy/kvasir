@@ -1,10 +1,12 @@
 # kvasir – Plan
 
-Stand: 2026-10-02 (Neustart auf `main`; alle zehn Issues #1 bis #10 umgesetzt). Der alte Stand liegt in `archive/v0-mimirlink`.
+Stand: 2026-10-10 (Neustart auf `main`; Worktree-Tool, Plattform-Informationen und Sichtbarkeit/Kennzahlen umgesetzt). Der alte Stand liegt in `archive/v0-mimirlink`.
 
 ## Ziel
 
 Terminal-Tool für **Git-Worktrees**: Überblick über mehrere Repos, schnelles Wechseln, schnelles Anlegen, sicheres Aufräumen. Später: Tagesauswertung („woran gearbeitet“) in das Obsidian-Vault-Journal (nicht Teil der ersten Version).
+
+**Seit 2026-10-07 zusätzlich: Sichtbarkeit, Prozessstand und Kennzahlen** (Issue #48, #70). kvasir ist dafür der deterministische, rein lesende „Motor“ (CLI mit JSON-Ausgabe, TUI-Panel als Verbraucher). Ursprung und Entscheidungen liegen im Repo `comcy/comcy.github.io` (Issue #28, `docs/workflow.md`, Abschnitt „Sichtbarkeit und Prozessstand“); die Umsetzung hier stammt nicht aus der Worktree-Planung oben und ist dort führend.
 
 ## Entscheidungen
 
@@ -73,17 +75,31 @@ Aus Issue #24, geplant per Grilling (2026-10-02). Rein lesend, ausschließlich �
 | 25 | `setup`: CLIs prüfen / Installation anbieten, Konventionen nachträglich ändern (Entwurf) | – |
 | 26 | Azure DevOps (Entwurf) | 27 |
 
+## Sichtbarkeit, Prozessstand und Kennzahlen (#48, #70)
+
+Rein lesend, ohne Modell, über `gh`/`az`. Quelle der Entscheidungen: `comcy/comcy.github.io` (`docs/workflow.md`). Befehle und Dateiformate sind in der README beschrieben.
+
+| Baustein | Inhalt | Issues |
+|---|---|---|
+| `kvasir status [#nr]` | Sub-Issues (beliebig tief), `blocked_by` (Prev/Succ), Prio, Status aus **Fakten** (erledigt, verworfen, blockiert, in Review, in Arbeit, offen; `status:*`-Label nur Hinweis), Termine (Meilenstein, `Geplant:`/`Frist:`), Stepper (Phasen/Schritte); `--format table\|text\|json`, `--layout tree\|split` | #49, #50, #51, #56, #67, #68 |
+| `kvasir graph` | Mermaid oder eigenständiges HTML/SVG: Spuren je Feature, Statusfarben, Blocker, Zeitachse | #52, #55 |
+| `kvasir metrics` | Kennzahlen aus `workflow/metrics.tsv`: `ticket_cycle_time`, `pr_duration`, `ci_red_before_merge`, `rework_fixes_per_change` (Heuristik), `eval_pass_rate`; Ereignismodell, GitHub und Azure DevOps; `text\|json\|markdown` | #70–#75 |
+| `kvasir init` / `kvasir.toml` | Konfiguration im Repo (Branch-Vorlagen, Phasen), `workflow/phases.tsv`, `states.tsv`, `detectors.tsv`; `doctor` prüft sie | #53, #64 |
+| TUI | Status- und Stepper-Panel in der Gesamtansicht (`i`) | #54 |
+
+Grenzen (gewollt): kein Schreiben in den Tracker; ohne Termine keine erfundene Zeit; Azure-DevOps-Teil nur gegen Fakes getestet.
+
 ## Teststrategie
 
 Pro Abschnitt ein Test gegen ein Wegwerf-Repo (`tempfile`, echtes `git`). Windows-Verhalten (`wt.exe`, Pfade) prüft der Nutzer manuell.
 
 ## Offen
 
-- **Board-Status live prüfen:** `projectItems` mit echtem Projekt-Board ist nur über Fixtures getestet (Token braucht `read:project`).
-- **Plattform-Nachbesserungen:** `webbrowser.open` läuft im UI-Thread; `gh api user` pro Repo bei jedem Refresh (cachen).
-- **Azure DevOps (#26):** umgesetzt mit #42 (Repo-Identität/Erkennung), #43 (Provider + TUI), #44 (`doctor`/`setup` für `az`). Nur gegen Dokumentation und Fixtures getestet; **echte Prüfung durch den Nutzer steht aus** (Checkliste als Kommentar an #26). Erledigt: #25 (`kvasir doctor`), #35 (`setup --reconfigure`, `kvasir config`), #36 (Einstellungen-Dialog `e`), #33 (Titel-Ränder, Footer), #37 (GitHub Pages von `main`).
-- **Windows testen** (`wt.exe`, Pfade, `install.ps1`) und die Install-Skripte einmal real ausführen — nur Linux wurde bisher geprüft.
+- **Windows testen** (#21): `wt.exe`, Pfade, `install.ps1`, `doctor`-Symbole; bisher nur Linux geprüft.
+- **Azure DevOps live prüfen** (#26): Provider, `status`, `metrics` nur gegen Dokumentation/Fakes getestet; Checkliste als Kommentar an #26.
+- **Board-Status live prüfen:** `projectItems` mit echtem Projekt-Board nur über Fixtures getestet (Token braucht `read:project`).
+- **`kvasir status` ohne Argument** (#80, `needs-triage`): Spaltenbreiten (Titel zuerst), ruhigere Übersicht, erledigte Teilbäume ausblenden.
 - **Tagesauswertung → Vault-Journal** („woran gearbeitet“): noch kein Issue, `vault_path` noch nicht konfigurierbar. Vorher grillen.
-- **Kleinigkeiten:** Abschlussnotiz wird vor `git worktree remove` gespeichert (bleibt stehen, wenn Git ablehnt); SSH-Passphrase-Abfrage kann Fetch bis zum Timeout blockieren; `setup`-URL-Erkennung bei Tippfehler im Pfad; `{date}` prüft nur das Format.
+- **Kleinigkeiten:** Abschlussnotiz wird vor `git worktree remove` gespeichert (bleibt stehen, wenn Git ablehnt); SSH-Passphrase-Abfrage kann Fetch bis zum Timeout blockieren; `setup`-URL-Erkennung bei Tippfehler im Pfad; `{date}` prüft nur das Format; `webbrowser.open` im UI-Thread; `gh api user` pro Refresh; `doctor`-Hilfetext nennt `az` nicht; Hinweis bei `credential.helper store`.
 - `setup --convert` (normalen Clone ins Bare-Layout umbauen), später.
 - Konfiguration liegt lokal (`~/.config/kvasir/` bzw. `%APPDATA%\kvasir`), kein Dotfiles-Repo; `repos.toml` ist bei Bedarf synchronisierbar.
