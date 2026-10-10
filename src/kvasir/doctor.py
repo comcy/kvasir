@@ -14,7 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from kvasir import repo_file
+from kvasir import metrics, repo_file
 from kvasir.config import load_local, load_repos
 from kvasir.platform.detect import detect_platform
 
@@ -222,9 +222,9 @@ def check_platform(url: str, system: str | None = None) -> list[Check]:
 
 def check_repo_files(url: str, root: Path, cfg) -> list[Check]:
     """kvasir.toml / workflow/phases.tsv of a registered repo, and conflicts with the local override."""
-    if not (root / repo_file.FILE).exists() and not (root / repo_file.PHASES_TSV).exists():
+    if not any((root / f).exists() for f in (repo_file.FILE, repo_file.PHASES_TSV, metrics.METRICS_TSV)):
         return []
-    probs = repo_file.problems(root)
+    probs = repo_file.problems(root) + (metrics.problems(root) if (root / metrics.METRICS_TSV).exists() else [])
     out = [Check("fail", f"{url}: {p}", f"fix it in {root}") for p in probs]
     shared = repo_file.repo_patterns(root)
     if cfg is not None and cfg.patterns_set and shared and shared != cfg.branch_patterns:
