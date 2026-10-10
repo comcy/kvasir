@@ -140,3 +140,13 @@ def test_today_invalid_report_exits_2(repo):
     save_local(LocalConfig(paths=load_local().paths, report={"mode": "x"}))
     assert _today("--date", "2001-01-01").exit_code == 2
     assert _today("--date", "2001-01-01", "--stdout").exit_code == 0
+
+
+def test_today_json_ignores_configured_output(repo, tmp_path):
+    d = date.today() - timedelta(days=1)
+    commit(repo, "feat: j", d)
+    conf = tmp_path / "{date}.md"
+    save_local(LocalConfig(paths=load_local().paths, report={"output": str(conf)}))
+    r = _today("--date", d.isoformat(), "--format", "json")
+    assert r.exit_code == 0 and '"repos"' in r.output
+    assert not (tmp_path / f"{d.isoformat()}.md").exists()

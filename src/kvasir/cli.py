@@ -486,7 +486,8 @@ def today(
             typer.echo(f"[report] invalid: {e}", err=True)
             raise typer.Exit(2) from None
         rcfg = None
-    dest = None if stdout else (out or (rcfg.output if rcfg else None))
+    # json never goes to the configured journal file (it would replace the whole note); only an explicit --out
+    dest = None if stdout else (out or (rcfg.output if rcfg and format == "md" else None))
     if dest:
         mode, heading = (rcfg.mode, rcfg.heading) if rcfg else ("overwrite", report_out.DEFAULT_HEADING)
         try:
