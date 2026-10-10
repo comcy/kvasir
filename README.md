@@ -148,6 +148,12 @@ Standardausgabe ist eine Tabelle (`--format table`): Ticket (rechtsbündig), Tit
 
 Status aus Tatsachen, in dieser Reihenfolge: geschlossen = erledigt (Grund "nicht geplant" oder Label `wontfix` = verworfen), offener Blocker = blockiert, offener PR (nicht Draft) = in Review, Draft-PR oder Branch mit der Issue-Nummer im Namen = in Arbeit, sonst offen. Ein `status:*`-Label widerspricht nur als Hinweis (`! Label sagt in-review, PR #7 ist Draft`); es ersetzt den Status nur dort, wo keine Tatsache vorliegt, und ist dann mit "(laut Label)" gekennzeichnet. Grenzen: höchstens 100 Sub-Issues, Blocker und offene PRs; Branch-Treffer über die Nummer als eigenes Namensstück (`feat/5-x`, nicht `feat/15-x`).
 
+## `kvasir metrics`
+
+Kennzahlen aus `workflow/metrics.tsv` des Repos (aktuelles Verzeichnis), rein lesend über `gh`; Repo aus `origin` oder `--repo owner/repo`, Zeitraum `--since 30d` (Standard, nur Tage). Spalten nach Namen: `id`, `art`, `name`, `unit`, `source`, optional `target`/`enabled`.
+
+Kvasir übersetzt GitHub-Daten in ein neutrales Ereignismodell `Event(item, art, zeit)` und rechnet nur darauf. Erste Fassung: Quelle `ticket_cycle_time` = Median von erstem Label `status:in-progress` (`in_arbeit`) bis `closed` (`geschlossen`) der im Zeitraum geschlossenen Tickets; Einheit `h` oder `d` aus der Datei. Tickets ohne `in_arbeit` zählen nicht. Ausgabe: Wert, `n=<Stichprobe>`, Ziel; `n < 3` als `zu klein` statt Wert, ohne Tickets `keine Daten`, jede andere Quelle `unbekannt`. Grenzen: höchstens 100 geschlossene Issues und 100 Timeline-Ereignisse je Issue; nur Text, nur GitHub.
+
 ## `kvasir doctor`
 
 Prüft die Voraussetzungen, jederzeit und ohne ein Repo zu registrieren. Je Punkt `✓` (ok), `✗` (Fehler) oder `!` (Warnung) mit passendem Befehl zur Behebung. Exit-Code 1 bei mindestens einem `✗`, sonst 0.

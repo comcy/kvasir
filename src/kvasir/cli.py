@@ -8,6 +8,7 @@ import typer
 
 from kvasir import __version__, repo_file
 from kvasir import doctor as doctor_mod
+from kvasir import metrics as metrics_mod
 from kvasir.clone import clone_bare
 from kvasir.config import (
     DEFAULT_FETCH_MINUTES,
@@ -373,3 +374,35 @@ def graph(
         out.write_text(text, encoding="utf-8")
     else:
         typer.echo(text, nl=False)
+
+
+@app.command()
+def metrics(
+    since: Annotated[str, typer.Option(help="Zeitraum, z. B. 30d")] = "30d",
+    repo: Annotated[str | None, typer.Option(help="owner/repo (default: origin of the current directory)")] = None,
+) -> None:
+    """Kennzahlen aus workflow/metrics.tsv (Text). Read-only; erste Fassung: ticket_cycle_time auf GitHub."""
+    try:
+        span = metrics_mod.parse_since(since)
+    except ValueError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(2) from e
+    try:
+        pr = PlatformRepo("github", repo) if repo else detect_platform(repo_info(Path.cwd()).remote_url or "")
+    except ValueError:
+        pr = None
+    if pr is None or pr.kind != "github":
+        typer.echo("no GitHub repo here; pass --repo owner/repo", err=True)
+        raise typer.Exit(2)
+    root = repo_file.checkout_root(Path.cwd())
+    try:
+        rows = repo_file._tsv(root, metrics_mod.METRICS_TSV)
+    except OSError as e:
+        typer.echo(f"{metrics_mod.METRICS_TSV}: {e.strerror or e}", err=True)
+        raise typer.Exit(1) from e
+    res = metrics_mod.events(GitHub(pr.slug), metrics_mod.now() - span)
+    if not res.ok:
+        typer.echo(f"{res.error.kind.value}: {res.error.message}", err=True)
+        raise typer.Exit(1)
+    for ln in metrics_mod.report(rows, res.data):
+        typer.echo(f"{ln.name or ln.id}: {ln.text}")
