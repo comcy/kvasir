@@ -81,10 +81,10 @@ Rein lesend, ohne Modell, über `gh`/`az`. Quelle der Entscheidungen: `comcy/com
 
 | Baustein | Inhalt | Issues |
 |---|---|---|
-| `kvasir status [#nr]` | Sub-Issues (beliebig tief), `blocked_by` (Prev/Succ), Prio, Status aus **Fakten** (erledigt, verworfen, blockiert, in Review, in Arbeit, offen; `status:*`-Label nur Hinweis), Termine (Meilenstein, `Geplant:`/`Frist:`), Stepper (Phasen/Schritte); `--format table\|text\|json`, `--layout tree\|split` | #49–#51, #56, #57–#59, #67–#69 |
+| `kvasir status [#nr]` | Sub-Issues (beliebig tief), `blocked_by` (Prev/Succ), Prio, Status aus **Fakten** (erledigt, verworfen, blockiert, in Review, in Arbeit, offen; `status:*`-Label nur Hinweis), Termine (Meilenstein, `Geplant:`/`Frist:`), Stepper (Phasen/Schritte); `--format table\|text\|json`, `--layout tree\|split` | #49, #50, #51, #56, #67, #68 |
 | `kvasir graph` | Mermaid oder eigenständiges HTML/SVG: Spuren je Feature, Statusfarben, Blocker, Zeitachse | #52, #55 |
 | `kvasir metrics` | Kennzahlen aus `workflow/metrics.tsv`: `ticket_cycle_time`, `pr_duration`, `ci_red_before_merge`, `rework_fixes_per_change` (Heuristik), `eval_pass_rate`; Ereignismodell, GitHub und Azure DevOps; `text\|json\|markdown` | #70–#75 |
-| `kvasir init` / `kvasir.toml` | Konfiguration im Repo (Branch-Vorlagen, Phasen), `workflow/phases.tsv`, `states.tsv`, `detectors.tsv`; `doctor` prüft sie | #53, #62, #64 |
+| `kvasir init` / `kvasir.toml` | Konfiguration im Repo (Branch-Vorlagen, Phasen), `workflow/phases.tsv`, `states.tsv`, `detectors.tsv`; `doctor` prüft sie | #53, #64 |
 | TUI | Status- und Stepper-Panel in der Gesamtansicht (`i`) | #54 |
 
 Grenzen (gewollt): kein Schreiben in den Tracker; ohne Termine keine erfundene Zeit; Azure-DevOps-Teil nur gegen Fakes getestet.
