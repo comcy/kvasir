@@ -23,8 +23,9 @@ CYCLE = "cycle\tlagging\tDurchlaufzeit\th\tticket_cycle_time\t24\n"
 
 
 class FakeGh:
-    def __init__(self, monkeypatch, issues, timelines, prs=(), runs=()):
+    def __init__(self, monkeypatch, issues, timelines, prs=(), runs=(), items=None):
         self.calls, self.issues, self.timelines, self.prs, self.runs = [], issues, timelines, list(prs), list(runs)
+        self.items = items or {}
         monkeypatch.setattr(ghmod.subprocess, "run", self)
 
     def __call__(self, args, **kw):
@@ -34,7 +35,9 @@ class FakeGh:
             assert args[2] == "list"
             return subprocess.CompletedProcess(args, 0, json.dumps(self.prs if args[1] == "pr" else self.runs).encode(), b"")
         path = args[2].split("?")[0]
-        if path == "repos/o/r/issues":
+        if path.split("/")[-2:-1] == ["issues"]:  # repos/o/r/issues/N
+            ans = self.items[int(path.split("/")[-1])]
+        elif path == "repos/o/r/issues":
             ans = self.issues
         else:
             ans = self.timelines[int(path.split("/")[-2])]  # KeyError = unerwarteter Aufruf
@@ -215,3 +218,72 @@ def test_echte_pr_und_lauf_form(tmp_path, monkeypatch):
 def test_pr_gh_fehler(tmp_path, monkeypatch):
     monkeypatch.setattr(ghmod.subprocess, "run", lambda a, **kw: subprocess.CompletedProcess(a, 1, b"", b"boom"))
     assert run(tmp_path, HEAD + PRD).exit_code == 1
+# --- eval_pass_rate ---
+EVALS = "e\tlagging\tEval-Bestehensquote\t%\teval_pass_rate\t80\n"
+
+
+def test_eval_pass_rate_echter_bericht(tmp_path):
+    res = run(tmp_path, HEAD + EVALS, "--evals", str(FIX / "evals"))
+    assert res.exit_code == 0, res.output
+    assert "75 %" in res.output and "n=4" in res.output and "Ziel 80" in res.output  # nur der neueste Bericht
+
+
+def test_eval_standardpfad_und_altformat_ohne_kosten(tmp_path):
+    d = tmp_path / "evals" / "reports"
+    d.mkdir(parents=True)
+    (d / "2026-01-01-0000.md").write_text(
+        "| Aufgabe | Läufe | Ergebnis |\n| --- | --- | --- |\n| a | 3/3 | bestanden |\n"
+        "| b | 0/3 | durchgefallen |\n| c | 0/0 | nicht prüfbar |\n| d | 3/3 | bestanden |\n", encoding="utf-8")
+    out = run(tmp_path, HEAD + EVALS).output
+    assert "66.7 %" in out and "n=3" in out  # nicht prüfbar zählt nicht
+
+
+def test_eval_keine_berichte(tmp_path):
+    assert "keine Daten" in run(tmp_path, HEAD + EVALS).output
+    assert "keine Daten" in run(tmp_path, HEAD + EVALS, "--evals", str(tmp_path / "nix")).output
+
+
+def test_eval_ohne_github_aufruf(tmp_path, monkeypatch):
+    fake = FakeGh(monkeypatch, [], {})
+    run(tmp_path, HEAD + EVALS, "--evals", str(FIX / "evals"))
+    assert fake.calls == []
+
+
+# --- rework_fixes_per_change ---
+REWORK = "r\tlagging\tNacharbeit\tn\trework_fixes_per_change\t1\n"
+
+
+def pr_rework(n, title, body, state="MERGED", created="2099-01-01T00:00:00Z"):
+    return {"number": n, "title": title, "state": state, "isDraft": False, "url": f"https://x/{n}", "author": {"login": "a"},
+            "headRefName": f"b{n}", "closingIssuesReferences": [], "createdAt": created, "body": body}
+
+
+def item(n, parent=None):
+    d = closed_issue(n, "2099-01-01T00:00:00Z")
+    if parent:
+        d["parent_issue_url"] = f"https://api.github.com/repos/o/r/issues/{parent}"
+    return d
+
+
+def test_nacharbeit_treffer_fehltreffer_ohne_bezug(tmp_path, monkeypatch):
+    # Features 10 (Sub-Issues 11, 12), 20 (Sub-Issue 21), 30 (ohne Sub-Issue): alle geschlossen
+    issues = [item(11, 10), item(12, 10), item(21, 20), item(30)]
+    offen = {**item(22, 20), "state": "open", "closed_at": None}
+    prs = [
+        pr_rework(1, "fix(a): x", "Refs #11"),                      # Treffer -> Feature 10
+        pr_rework(2, "fix(b): y", "Closes #12"),                    # Treffer -> Feature 10
+        pr_rework(3, "feat(a): z", "Refs #11"),                     # Fehltreffer: kein fix
+        pr_rework(4, "fix(c): w", "kein Bezug"),                    # kein Bezug
+        pr_rework(5, "fix(d): v", "Refs #21", state="CLOSED"),      # nicht gemergt
+        pr_rework(6, "fix(e): u", "Closes #30"),                    # Treffer -> Feature 30 (ohne Parent = selbst)
+        pr_rework(8, "fix: offen", "Refs #22"),                     # Treffer -> Feature 20 (Issue 22 offen, Parent per item())
+        pr_rework(7, "fix: alt", "Refs #11", created="2000-01-01T00:00:00Z"),  # außerhalb Zeitraum
+    ]
+    FakeGh(monkeypatch, issues, {}, prs, items={22: offen})
+    out = run(tmp_path, HEAD + REWORK).output
+    assert "1.3, n=3" in out and "Heuristik" in out  # (2+1+1)/3 Features
+
+
+def test_nacharbeit_keine_daten(tmp_path, monkeypatch):
+    FakeGh(monkeypatch, [], {}, [])
+    assert "keine Daten" in run(tmp_path, HEAD + REWORK).output

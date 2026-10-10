@@ -380,8 +380,9 @@ def graph(
 def metrics(
     since: Annotated[str, typer.Option(help="Zeitraum, z. B. 30d")] = "30d",
     repo: Annotated[str | None, typer.Option(help="owner/repo (default: origin of the current directory)")] = None,
+    evals: Annotated[Path | None, typer.Option(help="Ordner mit Eval-Berichten (default: evals/reports/ des Checkouts)")] = None,
 ) -> None:
-    """Kennzahlen aus workflow/metrics.tsv (Text). Read-only; ticket_cycle_time, pr_duration, ci_red_before_merge auf GitHub."""
+    """Kennzahlen aus workflow/metrics.tsv (Text). Read-only; GitHub-Tickets und PRs, lokale Eval-Berichte."""
     try:
         span = metrics_mod.parse_since(since)
     except ValueError as e:
@@ -400,9 +401,14 @@ def metrics(
     except OSError as e:
         typer.echo(f"{metrics_mod.METRICS_TSV}: {e.strerror or e}", err=True)
         raise typer.Exit(1) from e
-    res = metrics_mod.events(GitHub(pr.slug), metrics_mod.now() - span)
-    if not res.ok:
-        typer.echo(f"{res.error.kind.value}: {res.error.message}", err=True)
-        raise typer.Exit(1)
-    for ln in metrics_mod.report(rows, res.data):
+    gh, since_dt = GitHub(pr.slug), metrics_mod.now() - span
+    srcs = {r.get("source") for r in rows}
+    res = metrics_mod.events(gh, since_dt, srcs)
+    rework = metrics_mod.rework_counts(gh, since_dt) if "rework_fixes_per_change" in srcs else None
+    for r in (res, rework):
+        if r is not None and not r.ok:
+            typer.echo(f"{r.error.kind.value}: {r.error.message}", err=True)
+            raise typer.Exit(1)
+    pass_list = metrics_mod.eval_results(evals or root / metrics_mod.EVALS_DIR) if "eval_pass_rate" in srcs else None
+    for ln in metrics_mod.report(rows, res.data, pass_list, rework.data if rework else None):
         typer.echo(f"{ln.name or ln.id}: {ln.text}")

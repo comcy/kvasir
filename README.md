@@ -154,6 +154,10 @@ Kennzahlen aus `workflow/metrics.tsv` des Repos (aktuelles Verzeichnis), rein le
 
 Kvasir übersetzt GitHub-Daten in ein neutrales Ereignismodell `Event(item, art, zeit)` und rechnet nur darauf. Quellen: `ticket_cycle_time` = Median von erstem Label `status:in-progress` (`in_arbeit`) bis `closed` (`geschlossen`) der im Zeitraum geschlossenen Tickets; Einheit `h` oder `d` aus der Datei. Tickets ohne `in_arbeit` zählen nicht. `pr_duration` = Median `pr_erstellt` (createdAt) bis `pr_gemergt` (mergedAt) der im Zeitraum gemergten PRs (`gh pr list --state merged`). `ci_red_before_merge` = Anteil dieser PRs mit mindestens einem `ci_rot` (Lauf `gh run list`, Ereignis `pull_request`, Branch des PRs, Ergebnis `failure`, zwischen Erstellen und Merge; abgebrochene Läufe und PRs ohne Läufe zählen nicht rot), in %. Ausgabe: Wert, `n=<Stichprobe>`, Ziel; `n < 3` als `zu klein` statt Wert, ohne Tickets `keine Daten`, jede andere Quelle `unbekannt`. Grenzen: höchstens 200 gemergte PRs und 1000 Läufe; höchstens 100 geschlossene Issues und 100 Timeline-Ereignisse je Issue; nur Text, nur GitHub.
 
+`eval_pass_rate`: Bestehensquote der Aufgaben im **neuesten** Bericht (Dateiname = Zeitstempel) unter `--evals PFAD` (Standard `evals/reports/` des Checkouts, lokal, ohne Plattform). Gelesen wird die Tabelle `| Aufgabe | Läufe | Ergebnis | … |` nach Spaltennamen (Altformat ohne Kosten-Spalte geht); Zeilen `bestanden` / `durchgefallen` zählen, `nicht prüfbar` nicht. Ohne Bericht `keine Daten`.
+
+`rework_fixes_per_change`: Mittel gemergter PRs mit Titel `fix(...)` und `Refs #N` / `Closes #N` im Body je Feature (Feature = Parent des bezogenen Issues, sonst das Issue selbst; Grundmenge = Features der im Zeitraum geschlossenen Tickets, ohne Fix-PR zählt 0). **Heuristik**, im Bericht gekennzeichnet; höchstens 100 PRs.
+
 ## `kvasir doctor`
 
 Prüft die Voraussetzungen, jederzeit und ohne ein Repo zu registrieren. Je Punkt `✓` (ok), `✗` (Fehler) oder `!` (Warnung) mit passendem Befehl zur Behebung. Exit-Code 1 bei mindestens einem `✗`, sonst 0.
