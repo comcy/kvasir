@@ -58,6 +58,8 @@ class KvasirApp(App):
         Binding("e", "edit_repo", "Edit"),
         Binding("s", "summary", "Summary"),
         Binding("a", "ask", "Ask"),
+        Binding("c", "suggest_commit", "Commit-Msg"),
+        Binding("t", "suggest_note", "Notiz-KI"),
         Binding("h", "focus_previous", "Left", show=False),
         Binding("l", "focus_next", "Right", show=False),
     ]
@@ -329,6 +331,39 @@ class KvasirApp(App):
         from kvasir.tui.prompt_screen import PromptScreen
 
         self.push_screen(PromptScreen())
+
+    def action_suggest_commit(self) -> None:
+        self._suggest("commit")
+
+    def action_suggest_note(self) -> None:
+        self._suggest("note")
+
+    def _suggest(self, kind: str) -> None:
+        from kvasir import llm
+        from kvasir.tui.suggest_screen import SuggestScreen
+
+        ri, ei = self.query_one(RepoList).highlighted, self.query_one(EntryList).current_entry()
+        wt = self.entries[ei] if ri is not None and ei is not None else None
+        if not isinstance(wt, Worktree) or wt.broken:
+            return self.notify("Select a worktree first", severity="warning")
+        url = self.rows[ri].url
+        try:
+            cfg = llm.load()
+            if cfg is None:
+                return self.notify("Kein [llm] in local.toml konfiguriert (kvasir doctor zeigt den Stand)", severity="warning")
+            if not llm.repo_enabled(url):
+                return self.notify("KI für dieses Repo deaktiviert (repos.toml llm = false)", severity="warning")
+        except (OSError, ValueError) as e:
+            return self.notify(f"[llm] ungültig: {e}", severity="error")
+        branch = wt.branch or wt.path.name
+
+        def done(text: str | None) -> None:
+            if text and kind == "note":
+                notes.add(url, branch, text)
+            if text:
+                self.action_reload()
+
+        self.push_screen(SuggestScreen(kind, url, branch, wt.path, cfg), done)
 
     def action_note(self) -> None:
         ri, ei = self.query_one(RepoList).highlighted, self.query_one(EntryList).current_entry()
