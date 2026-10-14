@@ -242,6 +242,23 @@ Weitere Befehle (`["ollama", "run", "<modell>"]`, `["gemini", "-p"]`) folgen der
 - Fehler (nicht erreichbar, Modell fehlt, Befehl fehlt, Timeout) kommen als Ergebnis zurück, nicht als Exception. Python-API: `kvasir.llm.complete(messages)`.
 - **Vorschläge (Worktree markieren):** `c` schlägt eine Conventional-Commit-Message aus `git diff --staged` vor (leer = Meldung, kein LLM-Aufruf); der Text ist editierbar, `Enter` fragt nach, ein zweites `Enter` führt `git commit -m` im Worktree aus (Autor und Hooks aus der git-Konfig, nie `--no-verify`/`--amend`; Fehler werden angezeigt). `t` schlägt eine Notiz aus Tageslog und `git diff HEAD` vor; `Enter` speichert sie als Notiz des Branches. `Esc` bricht jeweils ab. Diffs sind auf 20000 Zeichen begrenzt, `.env`-Dateien ausgenommen.
 
+## Workspace (experimentell)
+
+Pro Worktree ein Terminal-Tab im IDE-Stil: kvasir links, AI-Session rechts oben, git-Shell darunter. Opt-in, wird auf dem Branch `feat/workspace` getestet (nicht auf `main`). Taste `o` im TUI öffnet den Workspace; mit `open_mode = "workspace"` tut das auch Enter.
+
+```toml
+[workspace]
+layout = "columns"                      # "columns" | "bottom" (git-Shell über die volle Breite)
+ai_command = "claude"                   # Neustart
+ai_resume_command = "claude --continue" # Standard beim Start
+open_mode = "terminal"                  # "terminal" | "workspace"
+```
+
+- **kitty:** `allow_remote_control yes` und `enabled_layouts splits` in `kitty.conf`. kvasir nutzt `kitten @ launch`.
+- **Windows Terminal:** `wt -w 0 nt …` mit `sp`-Splits, keine weiteren Voraussetzungen.
+- Anderes Terminal: Hinweis und normales Öffnen (`open_command`).
+- Im Tab startet `kvasir tui --select <pfad>` mit vorgewähltem Worktree. `kvasir doctor` prüft `[workspace]` und die kitty-Fernsteuerung.
+
 ## Konfiguration
 
 Zwei Dateien, Verzeichnis je Betriebssystem:

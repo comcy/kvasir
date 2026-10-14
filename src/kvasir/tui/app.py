@@ -14,7 +14,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.timer import Timer
 from textual.widgets import Footer, OptionList, Static
 
-from kvasir import daylog, notes
+from kvasir import daylog, notes, workspace
 from kvasir.config import RepoConfig, load_local, load_repos
 from kvasir.new_worktree import is_bare_layout
 from kvasir.open_terminal import OpenTerminalError, open_terminal
@@ -60,12 +60,14 @@ class KvasirApp(App):
         Binding("a", "ask", "Ask"),
         Binding("c", "suggest_commit", "Commit-Msg"),
         Binding("t", "suggest_note", "Notiz-KI"),
+        Binding("o", "open_workspace", "Workspace"),
         Binding("h", "focus_previous", "Left", show=False),
         Binding("l", "focus_next", "Right", show=False),
     ]
 
-    def __init__(self) -> None:
+    def __init__(self, select: Path | None = None) -> None:
         super().__init__()
+        self._select = select  # --select: Worktree path to jump to on the first load
         self.rows: list[RepoRow] = []
         self.entries: list = []  # visible entries, flat, without headings
         self.show_remote = False  # Remote-Branches collapsed by default; survives reloads
@@ -276,6 +278,12 @@ class KvasirApp(App):
         repos, entries = self.query_one(RepoList), self.query_one(EntryList)
         keep_repo, keep_entry = repos.highlighted or 0, entries.current_entry() or 0  # survive reloads
         keep_repo = keep_repo if keep_repo < len(rows) else 0
+        if self._select:
+            sel, self._select = self._select.resolve(), None
+            for r in rows:
+                if r.view and any(w.path.resolve() == sel for w in r.view.worktrees):
+                    self._mark = (r.url, sel)
+                    break
         if self._mark:  # a new worktree was just created: jump to it
             keep_repo = next((i for i, r in enumerate(rows) if r.url == self._mark[0]), keep_repo)
         repos.set_rows(rows, self.sync)
@@ -309,7 +317,7 @@ class KvasirApp(App):
             keep = keep if keep < len(self.entries) else 0
             if self._mark:
                 keep = next((i for i, e in enumerate(self.entries)
-                             if getattr(e, "path", None) == self._mark[1]), keep)
+                             if getattr(e, "path", None) is not None and e.path.resolve() == self._mark[1].resolve()), keep)
         snap = self.platform.get(row.url) if row else None
         marks = platform_view.markers(snap, self.entries) if snap else {}
         self.query_one(EntryList).set_entries(groups, notes.latest_by_branch(row.url) if row else {}, keep, marks)
@@ -415,12 +423,32 @@ class KvasirApp(App):
         i = ev.option_list.index_map[ev.option_index]
         if i is None:
             return
-        entry = self.entries[i]
+        self._open(self.entries[i], False)
+
+    def action_open_workspace(self) -> None:
+        ei = self.query_one(EntryList).current_entry()
+        if ei is not None:
+            self._open(self.entries[ei], True)
+
+    def _open(self, entry, force_ws: bool) -> None:
+        """Workspace tab on key `o` or open_mode = "workspace"; hint + plain terminal if it cannot start."""
         if not isinstance(entry, Worktree) or entry.broken:
             self.notify("Kein Worktree: neuen Worktree anlegen (n).", severity="warning")
             return
+        local = load_local()
         try:
-            open_terminal(entry.path, load_local().open_command)
+            wcfg = workspace.parse(local.workspace)
+        except ValueError as e:
+            return self.notify(f"[workspace] ungültig: {e}", severity="error")
+        if force_ws or wcfg.open_mode == "workspace":
+            ri = self.query_one(RepoList).highlighted
+            repo = short_name(self.rows[ri].url) if ri is not None else entry.path.name
+            hint = workspace.open_workspace(entry.path, workspace.title(repo, entry.branch or entry.path.name), wcfg)
+            if hint is None:
+                return
+            self.notify(hint, severity="warning")
+        try:
+            open_terminal(entry.path, local.open_command)
         except OpenTerminalError as e:
             self.copy_to_clipboard(str(entry.path))
             self.notify(f"{e}\nPfad in Zwischenablage: {entry.path}", severity="error", timeout=15)

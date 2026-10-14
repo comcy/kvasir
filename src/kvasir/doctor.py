@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from kvasir import llm, metrics, repo_file, report_out
+from kvasir import llm, metrics, repo_file, report_out, workspace
 from kvasir.config import load_local, load_repos
 from kvasir.platform.detect import detect_platform
 
@@ -267,12 +267,30 @@ def check_report(local) -> list[Check]:
     return [Check("ok", f"report: {cfg.mode} -> {cfg.output}")]
 
 
+def check_workspace(local, env: dict | None = None) -> list[Check]:
+    """Only when [workspace] is set: valid; under kitty, remote control reachable."""
+    if local is None or not local.workspace:
+        return []
+    try:
+        cfg = workspace.parse(local.workspace)
+    except ValueError as e:
+        return [Check("fail", f"[workspace] invalid: {e}", "fix [workspace] in local.toml")]
+    out = [Check("ok", f"workspace: {cfg.layout}, open_mode {cfg.open_mode}")]
+    if workspace.detect(env) == "kitty":
+        r = _run(["kitten", "@", "ls"], timeout=5)
+        if r is None or r[0] != 0:
+            out.append(Check("warn", "kitty remote control not reachable",
+                             "kitty.conf: allow_remote_control yes, enabled_layouts splits (then restart kitty)"))
+    return out
+
+
 def all_checks(system: str | None = None) -> list[Check]:
     out = [check_git(), *check_cli(CLIS["github"], system)]
     cfg, repos, local = check_config()
     out += cfg
     out += check_llm(local)
     out += check_report(local)
+    out += check_workspace(local)
     if any((r := detect_platform(f"https://{u}")) and r.kind == "azure" for u in repos):
         out += check_cli(CLIS["azure"], system)  # az only matters when an Azure repo is registered
     for url in repos:

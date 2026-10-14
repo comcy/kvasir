@@ -42,6 +42,7 @@ class LocalConfig:
     paths: dict[str, str] = field(default_factory=dict)  # repo URL -> local path
     llm: dict = field(default_factory=dict)  # raw [llm] table, parsed/validated by kvasir.llm
     report: dict = field(default_factory=dict)  # raw [report] table, parsed/validated by kvasir.report_out
+    workspace: dict = field(default_factory=dict)  # raw [workspace] table, parsed/validated by kvasir.workspace
 
 
 def _read(name: str) -> dict:
@@ -85,7 +86,7 @@ def save_repos(repos: dict[str, RepoConfig]) -> None:
 def load_local() -> LocalConfig:
     raw = _read("local.toml")
     return LocalConfig(open_command=raw.get("open_command"), paths=dict(raw.get("repos", {})),
-                       llm=dict(raw.get("llm", {})), report=dict(raw.get("report", {})))
+                       llm=dict(raw.get("llm", {})), report=dict(raw.get("report", {})), workspace=dict(raw.get("workspace", {})))
 
 
 def save_local(c: LocalConfig) -> None:
@@ -99,4 +100,7 @@ def save_local(c: LocalConfig) -> None:
     if c.report:  # values: str
         out.append("\n[report]")
         out += [f"{k} = {json.dumps(v)}" for k, v in c.report.items()]
+    if c.workspace:  # values: str or list of str
+        out.append("\n[workspace]")
+        out += [f"{k} = {json.dumps(v)}" for k, v in c.workspace.items()]
     _write("local.toml", "\n".join(out) + "\n")
