@@ -38,6 +38,7 @@ class RepoList(OptionList):
         self._rows: list[RepoRow] = []
         self._sync: dict[str, tuple[float | None, str | None]] = {}
         self._platform: dict[str, tuple[str, bool]] = {}  # url -> (status line, is error)
+        self.repo_colors: dict[str, str] = {}  # url -> `#rrggbb` repo color
 
     def set_platform(self, lines: dict[str, tuple[str, bool]]) -> None:
         """url -> (platform status line, is error); redraws without moving the highlight."""
@@ -57,7 +58,8 @@ class RepoList(OptionList):
 
         self.clear_options()
         for r in self._rows:
-            name = line(short_name(r.url), "bold")
+            c = self.repo_colors.get(r.url)
+            name = line(("▌ " if c else "") + short_name(r.url), f"bold {c}" if c else "bold")
             path = line(tilde(r.path) if r.path else "(no path)", "dim")
             if r.view:
                 ts, err = self._sync.get(r.url, (None, None))
@@ -91,11 +93,14 @@ class EntryList(OptionList):
         self._groups: list[Group] = []
         self._notes: dict[str, dict] = {}
         self._marks: dict[str, str] = {}
+        self._open_ws: dict[str, str] = {}
 
     def set_entries(self, groups: list[Group], notes: dict[str, dict] | None = None, keep: int = 0,
-                    marks: dict[str, str] | None = None) -> None:
-        """`notes`: branch -> newest note. `keep`: entry index to highlight. `marks`: entry name -> PR marker."""
+                    marks: dict[str, str] | None = None, open_ws: dict[str, str] | None = None) -> None:
+        """`notes`: branch -> newest note. `keep`: entry index to highlight. `marks`: entry name -> PR marker.
+        `open_ws`: worktree path -> color for worktrees with an open workspace (`●` in front)."""
         self._groups, self._notes, self._marks = groups, notes or {}, marks or {}
+        self._open_ws = open_ws or {}
         self._render_groups(keep)
 
     def entry_to_option(self, i: int) -> int | None:
@@ -110,6 +115,8 @@ class EntryList(OptionList):
         self.index_map = []
         names = [entry_name(e) for g in self._groups for e in g.visible]
         total = max(8, self.scrollable_content_region.width - 2)  # option padding
+        if self._open_ws:
+            total -= 2  # room for the `● ` marker column
         nw = name_width(names, total)
         mw = max((len(self._marks.get(n, "")) for n in names), default=0)  # column only if any marker
         n = 0
@@ -121,7 +128,11 @@ class EntryList(OptionList):
                 note = self._notes.get(getattr(e, "branch", None) or getattr(e, "name", ""))
                 style = "red" if isinstance(e, Worktree) and e.broken else "dim" if isinstance(e, Branch) else ""
                 line = format_entry(e, nw, note["text"] if note else "", self._marks.get(entry_name(e), ""), mw)
-                self.add_option(_line(cut(line, total), style))
+                opt = _line(cut(line, total), style)
+                if self._open_ws:
+                    on = isinstance(e, Worktree) and str(e.path) in self._open_ws
+                    opt = Text("● ", style=self._open_ws.get(str(e.path), "") or "bold") + opt if on else Text("  ") + opt
+                self.add_option(opt)
                 self.index_map.append(n)
                 n += 1
         opt = self.entry_to_option(keep) if keep is not None else None

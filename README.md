@@ -252,11 +252,14 @@ layout = "columns"                      # "columns" | "bottom" (git-Shell über 
 ai_command = "claude"                   # Neustart
 ai_resume_command = "claude --continue" # Standard beim Start
 open_mode = "terminal"                  # "terminal" | "workspace"
+tint = false                            # kitty: Fensterhintergrund in Repo-Farbe tönen
 ```
 
 - **kitty:** `allow_remote_control yes` und `enabled_layouts splits` in `kitty.conf`. kvasir nutzt `kitten @ launch`.
 - **Windows Terminal:** `wt -w 0 nt …` mit `sp`-Splits, keine weiteren Voraussetzungen.
 - Anderes Terminal: Hinweis und normales Öffnen (`open_command`).
+- **Sessions:** kvasir merkt sich offene Workspaces (`workspaces.json` im Konfigurationsverzeichnis; verwaiste Einträge verschwinden beim Laden). Worktrees mit offenem Workspace tragen `●` in der Repo-Farbe; `g` springt in kitty zum Tab (`kitten @ focus-tab`), in Windows Terminal geht das nicht (nur Hinweis "zuletzt geöffnet").
+- **Farbe:** pro Repo ein stabiler Hash der URL auf eine feste Palette (Repo-Name im TUI, Tab-Farbe per `set-tab-color` bzw. `--tabColor`); Override mit `color = "#rrggbb"` im Eintrag in `repos.toml`. `tint = true` in `[workspace]` tönt in kitty zusätzlich den Fensterhintergrund (Standard `false`, setzt dunklen Hintergrund voraus).
 - Im Tab startet `kvasir tui --select <pfad>` mit vorgewähltem Worktree. `kvasir doctor` prüft `[workspace]` und die kitty-Fernsteuerung.
 
 ## Konfiguration
