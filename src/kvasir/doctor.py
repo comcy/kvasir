@@ -281,6 +281,9 @@ def check_workspace(local, env: dict | None = None) -> list[Check]:
         if r is None or r[0] != 0:
             out.append(Check("warn", "kitty remote control not reachable",
                              "kitty.conf: allow_remote_control yes, enabled_layouts splits (then restart kitty)"))
+        elif not (env if env is not None else os.environ).get("KITTY_LISTEN_ON"):
+            out.append(Check("warn", "kitty has no socket (listen_on): the TUI is suspended briefly when opening",
+                             "kitty.conf: listen_on unix:/tmp/kitty-{kitty_pid} (then restart kitty)"))
     return out
 
 

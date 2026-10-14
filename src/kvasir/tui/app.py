@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from contextlib import nullcontext
 from datetime import datetime
 from functools import partial
 from pathlib import Path
@@ -494,11 +495,13 @@ class KvasirApp(App):
             url = self._repo_url()
             repo = short_name(url) if url else entry.path.name
             color = self._colors().get(url) if url else None
-            hint = workspace.open_workspace(
-                entry.path, workspace.title(repo, entry.branch or entry.path.name), wcfg, color=color,
-                on_open=lambda term, win: (workspace.register(entry.path, term, win),
-                                           self.sessions.update({str(entry.path): {"terminal": term, "window": win,
-                                                                                    "ts": time.time()}})))
+            # kitty without a socket answers over the tty: stop the TUI's input reader while `kitten @` runs
+            with self.suspend() if workspace.needs_suspend() else nullcontext():
+                hint = workspace.open_workspace(
+                    entry.path, workspace.title(repo, entry.branch or entry.path.name), wcfg, color=color,
+                    on_open=lambda term, win: (workspace.register(entry.path, term, win),
+                                               self.sessions.update({str(entry.path): {"terminal": term, "window": win,
+                                                                                        "ts": time.time()}})))
             if hint is None:
                 return
             self.notify(hint, severity="warning")

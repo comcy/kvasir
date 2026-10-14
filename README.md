@@ -255,7 +255,7 @@ open_mode = "terminal"                  # "terminal" | "workspace"
 tint = false                            # kitty: Fensterhintergrund in Repo-Farbe tönen
 ```
 
-- **kitty:** `allow_remote_control yes` und `enabled_layouts splits` in `kitty.conf`. kvasir nutzt `kitten @ launch`.
+- **kitty:** `allow_remote_control yes`, `enabled_layouts splits,stack` und `listen_on unix:/tmp/kitty-{kitty_pid}` in `kitty.conf` (kitty neu starten). kvasir nutzt `kitten @ launch`. Ohne `listen_on` läuft `kitten @` über das TTY der TUI: kvasir pausiert die TUI dann kurz beim Öffnen.
 - **Windows Terminal:** `wt -w 0 nt …` mit `sp`-Splits, keine weiteren Voraussetzungen.
 - Anderes Terminal: Hinweis und normales Öffnen (`open_command`).
 - **Sessions:** kvasir merkt sich offene Workspaces (`workspaces.json` im Konfigurationsverzeichnis; verwaiste Einträge verschwinden beim Laden). Worktrees mit offenem Workspace tragen `●` in der Repo-Farbe; `g` springt in kitty zum Tab (`kitten @ focus-tab`), in Windows Terminal geht das nicht (nur Hinweis "zuletzt geöffnet").
