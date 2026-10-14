@@ -90,3 +90,69 @@ def test_config_roundtrip_and_doctor(tmp_path, monkeypatch):
     monkeypatch.setattr(doctor, "_run", lambda argv, timeout=0: None)
     r = doctor.check_workspace(loc, env={"KITTY_WINDOW_ID": "1"})
     assert r[-1].status == "warn" and "allow_remote_control" in r[-1].fix
+
+
+def test_repo_color_stable_and_override():
+    a = workspace.repo_color("github.com/o/r")
+    assert a == workspace.repo_color("github.com/o/r") and a in workspace.PALETTE
+    assert workspace.repo_color("github.com/o/r", "#123456") == "#123456"
+
+
+def test_repo_color_config_roundtrip(tmp_path, monkeypatch):
+    from kvasir.config import RepoConfig, load_repos, save_repos
+    monkeypatch.setenv("KVASIR_CONFIG_DIR", str(tmp_path))
+    save_repos({"u/a": RepoConfig(color="#AABBCC"), "u/b": RepoConfig()})
+    r = load_repos()
+    assert r["u/a"].color == "#aabbcc" and r["u/b"].color is None
+    (tmp_path / "repos.toml").write_text('["u/c"]\ncolor = "red"\n')
+    assert load_repos()["u/c"].color is None
+
+
+def test_tint_parse():
+    assert workspace.parse({}).tint is False and workspace.parse({"tint": True}).tint is True
+    with pytest.raises(ValueError):
+        workspace.parse({"tint": "yes"})
+
+
+def test_color_in_commands_and_registration(tmp_path, monkeypatch):
+    monkeypatch.setenv("KVASIR_CONFIG_DIR", str(tmp_path))
+    w = workspace.wt_argv(P, "t", AI, color="#112233")
+    assert w[w.index("--tabColor") + 1] == "#112233"
+    seen, calls = [], []
+    ids = iter(["11", "", "12", "13", "", ""])
+
+    def fake(argv):
+        calls.append(argv)
+        return next(ids)
+
+    cfg = workspace.parse({"tint": True})
+    assert workspace.open_workspace(P, "t", cfg, env={"KITTY_WINDOW_ID": "1"}, launch=fake, color="#336699",
+                                    on_open=lambda t, w: seen.append((t, w))) is None
+    assert seen == [("kitty", "11")]
+    tab = calls[4]
+    assert tab[2] == "set-tab-color" and "window_id:11" in tab and "active_bg=#336699" in tab
+    tint = calls[5]
+    assert tint[2] == "set-colors" and "id:11 or id:12 or id:13" in tint
+
+
+def test_registry_prune_and_tolerance(tmp_path, monkeypatch):
+    monkeypatch.setenv("KVASIR_CONFIG_DIR", str(tmp_path))
+    f = tmp_path / workspace.REGISTRY
+    f.write_text("{not json")
+    assert workspace.sessions() == {}
+    workspace.register(Path("/a"), "kitty", "5", now=1000)
+    workspace.register(Path("/b"), "kitty", "6", now=1000)
+    workspace.register(Path("/c"), "wt", None, now=1000)
+    assert set(workspace.sessions(None, now=1000)) == {"/a", "/b", "/c"}
+    assert set(workspace.sessions({"5"}, now=1010)) == {"/a", "/c"}
+    assert set(workspace.sessions({"5"}, now=1000 + workspace.MAX_AGE + 1)) == {"/a"}
+    assert set(workspace._load_registry()) == {"/a"}  # written back
+    f.write_text('{"/x": 3}')
+    assert workspace.sessions() == {}
+
+
+def test_kitty_alive_and_focus():
+    out = '[{"tabs": [{"windows": [{"id": 3}, {"id": 7}]}]}]'
+    assert workspace.kitty_alive(lambda a: out) == {"3", "7"}
+    assert workspace.kitty_alive(lambda a: "garbage") is None
+    assert workspace.kitty_focus_argv("7") == ["kitten", "@", "focus-tab", "--match", "window_id:7"]

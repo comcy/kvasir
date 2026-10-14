@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import ClassVar
@@ -61,6 +62,7 @@ class KvasirApp(App):
         Binding("c", "suggest_commit", "Commit-Msg"),
         Binding("t", "suggest_note", "Notiz-KI"),
         Binding("o", "open_workspace", "Workspace"),
+        Binding("g", "jump_workspace", "Springen"),
         Binding("h", "focus_previous", "Left", show=False),
         Binding("l", "focus_next", "Right", show=False),
     ]
@@ -69,6 +71,7 @@ class KvasirApp(App):
         super().__init__()
         self._select = select  # --select: Worktree path to jump to on the first load
         self.rows: list[RepoRow] = []
+        self.sessions: dict[str, dict] = {}  # worktree path -> registry entry (open workspaces)
         self.entries: list = []  # visible entries, flat, without headings
         self.show_remote = False  # Remote-Branches collapsed by default; survives reloads
         self._mark: tuple[str, Path] | None = None  # (repo url, new worktree path) to highlight after reload
@@ -271,10 +274,17 @@ class KvasirApp(App):
     @work(thread=True, exclusive=True)
     def _load(self) -> None:
         rows = load_rows()  # git calls: keep off the UI thread
-        self.call_from_thread(self._loaded, rows)
+        reg = workspace.sessions(self._alive())  # may call `kitten @ ls`
+        self.call_from_thread(self._loaded, rows, reg)
 
-    def _loaded(self, rows: list[RepoRow]) -> None:
+    @staticmethod
+    def _alive() -> set[str] | None:
+        """Window ids of the running kitty; None outside kitty (entries are then kept as they are)."""
+        return workspace.kitty_alive() if workspace.detect() == "kitty" else None
+
+    def _loaded(self, rows: list[RepoRow], reg: dict[str, dict] | None = None) -> None:
         self.rows = rows
+        self.sessions = reg or {}
         repos, entries = self.query_one(RepoList), self.query_one(EntryList)
         keep_repo, keep_entry = repos.highlighted or 0, entries.current_entry() or 0  # survive reloads
         keep_repo = keep_repo if keep_repo < len(rows) else 0
@@ -286,6 +296,7 @@ class KvasirApp(App):
                     break
         if self._mark:  # a new worktree was just created: jump to it
             keep_repo = next((i for i, r in enumerate(rows) if r.url == self._mark[0]), keep_repo)
+        repos.repo_colors = self._colors()
         repos.set_rows(rows, self.sync)
         self.query_one("#repos-col").border_title = f"Repos ({len(rows)})"
         if rows:
@@ -320,7 +331,9 @@ class KvasirApp(App):
                              if getattr(e, "path", None) is not None and e.path.resolve() == self._mark[1].resolve()), keep)
         snap = self.platform.get(row.url) if row else None
         marks = platform_view.markers(snap, self.entries) if snap else {}
-        self.query_one(EntryList).set_entries(groups, notes.latest_by_branch(row.url) if row else {}, keep, marks)
+        open_ws = {p: self._colors().get(row.url, "") for p in self.sessions} if row else {}
+        self.query_one(EntryList).set_entries(groups, notes.latest_by_branch(row.url) if row else {}, keep, marks,
+                                              open_ws)
         self._show_detail(self.entries[keep] if self.entries else None)
 
     def _show_detail(self, item) -> None:
@@ -425,6 +438,43 @@ class KvasirApp(App):
             return
         self._open(self.entries[i], False)
 
+    def _colors(self) -> dict[str, str]:
+        """repo url -> `#rrggbb` (repos.toml `color` or stable hash)."""
+        try:
+            cfgs = load_repos()
+        except (OSError, ValueError):
+            cfgs = {}
+        return {r.url: workspace.repo_color(r.url, cfgs[r.url].color if r.url in cfgs else None) for r in self.rows}
+
+    def _repo_url(self) -> str | None:
+        ri = self.query_one(RepoList).highlighted
+        return self.rows[ri].url if ri is not None and ri < len(self.rows) else None
+
+    def action_jump_workspace(self) -> None:
+        """Focus the kitty tab of the selected Worktree's open workspace."""
+        ei = self.query_one(EntryList).current_entry()
+        entry = self.entries[ei] if ei is not None else None
+        e = self.sessions.get(str(entry.path)) if isinstance(entry, Worktree) else None
+        if e is None:
+            return self.notify("Kein offener Workspace für diesen Worktree (o öffnet einen).", severity="warning")
+        if not e.get("window"):
+            when = datetime.fromtimestamp(e["ts"]).strftime("%Y-%m-%d %H:%M")
+            return self.notify(f"Zuletzt geöffnet {when}; Springen geht nur in kitty.", severity="warning")
+        if workspace.detect() != "kitty":
+            return self.notify("Springen geht nur aus kitty heraus.", severity="warning")
+        alive = workspace.kitty_alive()
+        if alive is None:
+            return self.notify("kitty-Fernsteuerung nicht erreichbar (kvasir doctor).", severity="error")
+        if e["window"] not in alive:
+            workspace.sessions(alive)  # drops the orphan
+            self.sessions.pop(str(entry.path), None)
+            self._show_entries(self.query_one(RepoList).highlighted, ei)
+            return self.notify("Der Workspace ist nicht mehr offen.", severity="warning")
+        try:
+            workspace._launch(workspace.kitty_focus_argv(e["window"]))
+        except OSError as err:
+            self.notify(f"Springen fehlgeschlagen: {err}", severity="error")
+
     def action_open_workspace(self) -> None:
         ei = self.query_one(EntryList).current_entry()
         if ei is not None:
@@ -441,9 +491,14 @@ class KvasirApp(App):
         except ValueError as e:
             return self.notify(f"[workspace] ungültig: {e}", severity="error")
         if force_ws or wcfg.open_mode == "workspace":
-            ri = self.query_one(RepoList).highlighted
-            repo = short_name(self.rows[ri].url) if ri is not None else entry.path.name
-            hint = workspace.open_workspace(entry.path, workspace.title(repo, entry.branch or entry.path.name), wcfg)
+            url = self._repo_url()
+            repo = short_name(url) if url else entry.path.name
+            color = self._colors().get(url) if url else None
+            hint = workspace.open_workspace(
+                entry.path, workspace.title(repo, entry.branch or entry.path.name), wcfg, color=color,
+                on_open=lambda term, win: (workspace.register(entry.path, term, win),
+                                           self.sessions.update({str(entry.path): {"terminal": term, "window": win,
+                                                                                    "ts": time.time()}})))
             if hint is None:
                 return
             self.notify(hint, severity="warning")
