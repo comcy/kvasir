@@ -74,6 +74,13 @@ def detect(env: dict | None = None) -> str | None:
     return None
 
 
+def needs_suspend(env: dict | None = None) -> bool:
+    """kitty without a socket (`listen_on`): `kitten @` talks over the tty the TUI is reading, so Textual
+    would swallow kitty's answer (timeout). The caller then runs open_workspace inside `App.suspend()`."""
+    env = os.environ if env is None else env
+    return detect(env) == "kitty" and not env.get("KITTY_LISTEN_ON")
+
+
 def title(repo: str, branch: str) -> str:
     return f"{repo} · {branch}"
 
@@ -232,7 +239,7 @@ def open_workspace(path: Path, tab_title: str, cfg: WorkspaceConfig, resume: boo
             win = None  # wt reports no window id
         else:
             return "Workspace braucht kitty oder Windows Terminal; öffne normales Terminal"
-    except OSError as e:
+    except (OSError, subprocess.TimeoutExpired) as e:
         return f"Workspace nicht gestartet ({e}); öffne normales Terminal"
     if on_open:
         on_open(term, win)

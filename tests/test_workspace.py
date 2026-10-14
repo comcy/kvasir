@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -156,3 +157,18 @@ def test_kitty_alive_and_focus():
     assert workspace.kitty_alive(lambda a: out) == {"3", "7"}
     assert workspace.kitty_alive(lambda a: "garbage") is None
     assert workspace.kitty_focus_argv("7") == ["kitten", "@", "focus-tab", "--match", "window_id:7"]
+
+
+def test_needs_suspend_only_for_kitty_without_socket():
+    assert workspace.needs_suspend({"KITTY_WINDOW_ID": "1"})
+    assert not workspace.needs_suspend({"KITTY_WINDOW_ID": "1", "KITTY_LISTEN_ON": "unix:/tmp/k"})
+    assert not workspace.needs_suspend({"WT_SESSION": "x"})
+    assert not workspace.needs_suspend({})
+
+
+def test_launch_timeout_becomes_hint():
+    def hang(argv):
+        raise subprocess.TimeoutExpired(argv, 10)
+
+    hint = workspace.open_workspace(P, "t", workspace.parse({}), env={"KITTY_WINDOW_ID": "1"}, launch=hang)
+    assert hint and "nicht gestartet" in hint
