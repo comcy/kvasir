@@ -81,16 +81,21 @@ def wt_argv(path: Path, tab_title: str, ai: list[str], layout: str = "columns") 
 
 
 def kitty_steps(path: Path, tab_title: str, ai: list[str], layout: str = "columns") -> list[list[str]]:
-    """Launch argvs in order. `id:{kvasir}`/`id:{ai}` are replaced by window ids from earlier steps."""
+    """Argvs in order: tab, goto-layout, then the splits. `{kvasir}`/`{ai}` in `window_id:`/`id:` args are
+    replaced by the window ids earlier `launch` steps printed (window_id: = the tab holding that window,
+    id: with --next-to = the window itself; a bare `--match id:` would mean a *tab* id)."""
     p = str(path)
     base = ["kitten", "@", "launch", "--cwd", p]
     tab = [*base, "--type=tab", "--tab-title", tab_title, *kvasir_argv(path)]
-    ai_win = [*base, "--type=window", "--location=vsplit", "--bias=70", "--match", "id:{kvasir}", "--title", "ai", *ai]
+    layout_step = ["kitten", "@", "goto-layout", "--match", "window_id:{kvasir}", "splits"]  # vsplit/hsplit need it
+
+    def win(loc: str, bias: int, near: str, title: str, *cmd: str) -> list[str]:
+        return [*base, "--type=window", f"--location={loc}", f"--bias={bias}", "--match", "window_id:{kvasir}",
+                "--next-to", f"id:{{{near}}}", "--title", title, *cmd]
+
     if layout == "bottom":
-        git = [*base, "--type=window", "--location=hsplit", "--bias=30", "--match", "id:{kvasir}", "--title", "git"]
-        return [tab, git, ai_win]
-    git = [*base, "--type=window", "--location=hsplit", "--bias=30", "--match", "id:{ai}", "--title", "git"]
-    return [tab, ai_win, git]
+        return [tab, layout_step, win("hsplit", 30, "kvasir", "git"), win("vsplit", 70, "kvasir", "ai", *ai)]
+    return [tab, layout_step, win("vsplit", 70, "kvasir", "ai", *ai), win("hsplit", 30, "ai", "git")]
 
 
 def _launch(argv: list[str]) -> str:
@@ -101,14 +106,16 @@ def _launch(argv: list[str]) -> str:
 
 
 def run_kitty(steps: list[list[str]], launch: Callable[[list[str]], str] = _launch) -> None:
-    """Run the steps; the window id each `launch` prints feeds the `--match` of the next ones."""
+    """Run the steps; the window id each `launch` prints feeds the match args of the later ones."""
     ids: dict[str, str] = {}
-    names = ["kvasir", *(["ai", "git"] if "{ai}" in " ".join(steps[-1]) else ["git", "ai"])]
-    for name, argv in zip(names, steps, strict=True):
-        wid = launch([a.format(**ids) if a.startswith("id:") else a for a in argv])
-        if not wid.isdigit():
-            raise OSError(f"unexpected output of kitten @ launch: {wid!r}")
-        ids[name] = wid
+    names = iter(["kvasir", *(["ai", "git"] if any("id:{ai}" in a for a in steps[-1]) else ["git", "ai"])])
+    for argv in steps:
+        out = launch([a.format(**ids) if a.startswith(("id:", "window_id:")) else a for a in argv])
+        if argv[2] != "launch":
+            continue
+        if not out.isdigit():
+            raise OSError(f"unexpected output of kitten @ launch: {out!r}")
+        ids[next(names)] = out
 
 
 def open_workspace(path: Path, tab_title: str, cfg: WorkspaceConfig, resume: bool = True,

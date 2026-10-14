@@ -41,17 +41,18 @@ def test_wt_columns_and_bottom():
 
 
 def test_kitty_steps_columns_and_bottom():
-    t, ai, git = workspace.kitty_steps(P, "t", AI)
+    t, lay, ai, git = workspace.kitty_steps(P, "t", AI)
     assert t[:3] == ["kitten", "@", "launch"] and "--type=tab" in t and t[-4:] == ["kvasir", "tui", "--select", str(P)]
-    assert "--location=vsplit" in ai and "id:{kvasir}" in ai and ai[-2:] == AI and str(P) in ai
-    assert "--location=hsplit" in git and "id:{ai}" in git
-    _, git, ai = workspace.kitty_steps(P, "t", AI, "bottom")
+    assert lay[:3] == ["kitten", "@", "goto-layout"] and lay[-1] == "splits"
+    assert "--location=vsplit" in ai and "window_id:{kvasir}" in ai and "id:{kvasir}" in ai and ai[-2:] == AI
+    assert "--location=hsplit" in git and "id:{ai}" in git and "window_id:{kvasir}" in git
+    _, _, git, ai = workspace.kitty_steps(P, "t", AI, "bottom")
     assert "--location=hsplit" in git and "id:{kvasir}" in git and "--location=vsplit" in ai
 
 
 def test_run_kitty_feeds_window_ids_and_resume_default():
     calls = []
-    ids = iter(["11", "12", "13", "21", "22", "23"])
+    ids = iter(["11", "", "12", "13", "21", "", "22", "23"])  # goto-layout prints nothing
 
     def fake(argv):
         calls.append(argv)
@@ -60,11 +61,12 @@ def test_run_kitty_feeds_window_ids_and_resume_default():
     cfg = workspace.parse({})
     env = {"KITTY_WINDOW_ID": "1"}
     assert workspace.open_workspace(P, "t", cfg, env=env, launch=fake) is None
-    assert "id:11" in calls[1] and "id:12" in calls[2]
-    assert calls[1][-2:] == AI
+    assert "window_id:11" in calls[1] and "window_id:11" in calls[2] and "id:11" in calls[2]
+    assert "id:12" in calls[3] and "window_id:11" in calls[3]
+    assert calls[2][-2:] == AI
     calls.clear()
     workspace.open_workspace(P, "t", cfg, resume=False, env=env, launch=fake)
-    assert calls[1][-1] == "claude" and "--continue" not in calls[1]
+    assert calls[2][-1] == "claude" and "--continue" not in calls[2]
 
 
 def test_fallback_hint_without_known_terminal_or_on_error():
