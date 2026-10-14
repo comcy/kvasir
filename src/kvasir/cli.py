@@ -258,11 +258,11 @@ def config(path: Annotated[bool, typer.Option("--path", help="Only print the con
 
 
 @app.command()
-def tui() -> None:
+def tui(select: Annotated[Path | None, typer.Option("--select", help="Preselect this Worktree path")] = None) -> None:
     """Open the three-column overview (read-only)."""
     from kvasir.tui.app import KvasirApp
 
-    KvasirApp().run()
+    KvasirApp(select).run()
 
 
 def _schedule_json(sc) -> dict:
