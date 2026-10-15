@@ -262,6 +262,34 @@ tint = false                            # kitty: Fensterhintergrund in Repo-Farb
 - **Farbe:** pro Repo ein stabiler Hash der URL auf eine feste Palette (Repo-Name im TUI, Tab-Farbe per `set-tab-color` bzw. `--tabColor`); Override mit `color = "#rrggbb"` im Eintrag in `repos.toml`. `tint = true` in `[workspace]` tönt in kitty zusätzlich den Fensterhintergrund (Standard `false`, setzt dunklen Hintergrund voraus).
 - Im Tab startet `kvasir tui --select <pfad>` mit vorgewähltem Worktree. `kvasir doctor` prüft `[workspace]` und die kitty-Fernsteuerung.
 
+### Einrichtung auf einem neuen Rechner
+
+`~/.config/kitty/kitty.conf` (kitty danach komplett neu starten):
+
+```conf
+# zwingend
+allow_remote_control yes
+listen_on unix:/tmp/kitty-{kitty_pid}
+enabled_layouts splits,stack
+
+# optional
+tab_bar_style powerline
+tab_bar_min_tabs 1
+confirm_os_window_close 0
+```
+
+```sh
+uv tool install --force git+https://github.com/comcy/kvasir@feat/workspace
+gh auth login
+claude                               # einmal einloggen (AI-Session)
+kvasir setup ~/Workspace/<repo>      # pro Repo
+kvasir doctor                        # prüft kitty-Fernsteuerung und [workspace]
+```
+
+- `[workspace]` in `local.toml` (Pfad: `kvasir doctor`) wie oben; die Datei wird nicht synchronisiert und muss auf dem neuen Rechner neu angelegt werden.
+- `open_command` ist nicht nötig (Standard `kitty --directory {path}`). Außerhalb von kitty (`KITTY_WINDOW_ID` fehlt) fällt `o` auf normales Öffnen zurück.
+- `[report]` und `[llm]` nur nötig, wenn `kvasir today` bzw. die LLM-Funktionen genutzt werden.
+
 ## Konfiguration
 
 Zwei Dateien, Verzeichnis je Betriebssystem:
