@@ -246,6 +246,8 @@ Weitere Befehle (`["ollama", "run", "<modell>"]`, `["gemini", "-p"]`) folgen der
 
 Pro Worktree ein Terminal-Tab im IDE-Stil: kvasir links, AI-Session rechts oben, git-Shell darunter. Opt-in, wird auf dem Branch `feat/workspace` getestet (nicht auf `main`). Taste `o` im TUI öffnet den Workspace; mit `open_mode = "workspace"` tut das auch Enter.
 
+kvasir und AI-Pane sind etwa gleich breit (~55/45), der git-Streifen ~30 %. Endet der AI-Befehl (auch mit Fehler, z. B. weil `claude --continue` keine Session findet), bleibt im AI-Pane eine interaktive Shell im Worktree (`$SHELL`; unter Windows Terminal PowerShell mit `-NoExit`), aus der du selbst eine Session startest.
+
 ```toml
 [workspace]
 layout = "columns"                      # "columns" | "bottom" (git-Shell über die volle Breite)

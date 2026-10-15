@@ -35,20 +35,31 @@ def test_wt_columns_and_bottom():
     assert a[a.index("--title") + 1] == "r · feat/x"
     assert a[8:12] == ["kvasir", "tui", "--select", str(P)]
     i = a.index("sp")
-    assert a[i:i + 4] == ["sp", "-V", "-s", "0.7"]
+    assert a[i:i + 4] == ["sp", "-V", "-s", "0.45"]
+    assert a[i + 8:a.index(";", i)] == workspace.keep_shell(AI, win=True)
     assert a[-8:] == ["sp", "-H", "-s", "0.3", "-d", str(P), "--title", "git"]
     b = workspace.wt_argv(P, "t", AI, "bottom")
-    assert b.index("-H") < b.index("mf") < b.index("-V") and b[-2:] == AI
+    assert b.index("-H") < b.index("mf") < b.index("-V") and b[-4:] == workspace.keep_shell(AI, win=True)
+    assert b[b.index("-V") + 1] == "-s" and b[b.index("-V") + 2] == "0.45"
+
+
+def test_keep_shell_argv_unchanged_and_separate():
+    ai = ["my ai", "--x=it's \"q\"", "$(rm)"]
+    assert workspace.keep_shell(ai) == ["sh", "-c", '"$@"; exec "${SHELL:-sh}"', "sh", *ai]
+    w = workspace.keep_shell(["a b", "it's"], win=True)
+    assert w[:3] == ["powershell", "-NoExit", "-Command"] and w[3] == "& 'a b' 'it''s'"
 
 
 def test_kitty_steps_columns_and_bottom():
     t, lay, ai, git = workspace.kitty_steps(P, "t", AI)
     assert t[:3] == ["kitten", "@", "launch"] and "--type=tab" in t and t[-4:] == ["kvasir", "tui", "--select", str(P)]
     assert lay[:3] == ["kitten", "@", "goto-layout"] and lay[-1] == "splits"
-    assert "--location=vsplit" in ai and "window_id:{kvasir}" in ai and "id:{kvasir}" in ai and ai[-2:] == AI
-    assert "--location=hsplit" in git and "id:{ai}" in git and "window_id:{kvasir}" in git
+    assert "--location=vsplit" in ai and "window_id:{kvasir}" in ai and "id:{kvasir}" in ai
+    assert ai[-6:] == workspace.keep_shell(AI) and "--bias=45" in ai
+    assert "--location=hsplit" in git and "id:{ai}" in git and "window_id:{kvasir}" in git and "--bias=30" in git
     _, _, git, ai = workspace.kitty_steps(P, "t", AI, "bottom")
     assert "--location=hsplit" in git and "id:{kvasir}" in git and "--location=vsplit" in ai
+    assert ai[-6:] == workspace.keep_shell(AI) and "--bias=45" in ai and "--bias=30" in git
 
 
 def test_run_kitty_feeds_window_ids_and_resume_default():
