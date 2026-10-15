@@ -248,7 +248,7 @@ mkdir -p ~/models/qwen3-8b-q4 && curl -L --fail -C - -o ~/models/qwen3-8b-q4/Qwe
 
 # Server starten (nur localhost; -ngl 99 = alle Schichten auf die GPU)
 llama-server --model ~/models/qwen3-8b-q4/Qwen3-8B-Q4_K_M.gguf \
-  --port 8090 --host 127.0.0.1 -ngl 99 -c 8192 --reasoning off
+  --port 8090 --host 127.0.0.1 -ngl 99 -c 16384 --reasoning off
 ```
 
 ```toml
@@ -267,6 +267,8 @@ timeout = 300                                                     # nur nötig b
 
 - **Datenschutz:** Vor dem ersten Senden an einen nicht-lokalen Endpunkt (nicht localhost/privates Netz; `command` gilt immer als nicht lokal) ist eine einmalige Bestätigung nötig; sie wird in `[llm] confirmed` in `local.toml` gespeichert. Pro Repo abschaltbar: `llm = false` im Eintrag in `repos.toml`.
 - **`kvasir doctor`** prüft die Config, die Erreichbarkeit (`GET /models` bzw. Befehl im PATH) und das Modell.
+- **Ask-Dialog (`a`):** Der Titel zeigt den Kontextverbrauch (`Ask · 5.2k / 8.2k tokens`; das Limit kommt bei llama.cpp aus `GET /props`, sonst nur der Verbrauch). `ctrl+n` leert Historie und Anzeige. Die Konversation bleibt beim Schließen (`Esc`) und erneuten Öffnen des Dialogs erhalten (nur im Speicher des laufenden TUI); eine beim Schließen noch unbeantwortete Frage entfällt. Ist das Limit bekannt, werden die ältesten Frage/Antwort-Paare verworfen, bevor der geschätzte Prompt (≈ 4 Zeichen/Token) Limit minus 1024 Token Antwortreserve übersteigt. Unter jeder Frage zeigt ein eingeklapptes `Kontext gesendet`-Element exakt den gesendeten System-Prompt. Bei `exceed_context_size` erscheint ein Hinweis (Reset oder `llama-server -c` erhöhen).
+- **`keep_history = true`** (optional in `[llm]`, Standard `false`): speichert die Ask-Konversation (Historie, Fragen, Antworten, Hinweise) nach jeder Antwort in `ask-history.json` im Config-Verzeichnis (nur Nutzerrechte) und lädt sie beim ersten Öffnen eines TUI-Starts; `ctrl+n` löscht die Datei. Nicht gespeichert werden die eingeklappten Kontext-Texte. **Achtung:** die Datei kann Auszüge aus Repos, Notizen und Tageslog enthalten. Ohne das Feld wird nie geschrieben oder gelesen.
 - Fehler (nicht erreichbar, Modell fehlt, Befehl fehlt, Timeout) kommen als Ergebnis zurück, nicht als Exception. Python-API: `kvasir.llm.complete(messages)`.
 - **Vorschläge (Worktree markieren):** `c` schlägt eine Conventional-Commit-Message aus `git diff --staged` vor (leer = Meldung, kein LLM-Aufruf); der Text ist editierbar, `Enter` fragt nach, ein zweites `Enter` führt `git commit -m` im Worktree aus (Autor und Hooks aus der git-Konfig, nie `--no-verify`/`--amend`; Fehler werden angezeigt). `t` schlägt eine Notiz aus Tageslog und `git diff HEAD` vor; `Enter` speichert sie als Notiz des Branches. `Esc` bricht jeweils ab. Diffs sind auf 20000 Zeichen begrenzt, `.env`-Dateien ausgenommen.
 

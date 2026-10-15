@@ -20,6 +20,7 @@ from kvasir.config import RepoConfig, load_local, load_repos, save_local
 from kvasir.platform.models import Error, ErrorKind, Result
 
 TIMEOUT = 120  # seconds, default for a completion
+PROPS_TIMEOUT = 3  # seconds, context size lookup
 PROBE_TIMEOUT = 10  # seconds, doctor reachability check
 
 
@@ -31,6 +32,7 @@ class LlmConfig:
     api_key_env: str | None = None
     command: list[str] = field(default_factory=list)
     timeout: int = TIMEOUT
+    keep_history: bool = False  # Ask dialog: conversation persisted in ask-history.json
     confirmed: list[str] = field(default_factory=list)  # targets the user agreed to send data to
 
 
@@ -57,6 +59,10 @@ def parse(raw: dict) -> LlmConfig:
     if not isinstance(t, int) or isinstance(t, bool) or t < 1:
         raise ValueError("timeout must be a positive number of seconds")
     cfg.timeout = t
+    keep = raw.get("keep_history", False)
+    if not isinstance(keep, bool):
+        raise ValueError("keep_history must be true or false")  # noqa: TRY004
+    cfg.keep_history = keep
     cfg.confirmed = [str(c) for c in raw.get("confirmed", [])]
     return cfg
 
@@ -187,9 +193,23 @@ def complete(messages: list[dict[str, str]], cfg: LlmConfig | None = None, repo:
     if not res.ok:
         return res
     try:
-        return Result(data=res.data["choices"][0]["message"]["content"])
+        usage = res.data.get("usage")
+        return Result(data=res.data["choices"][0]["message"]["content"], usage=usage if isinstance(usage, dict) else None)
     except (KeyError, IndexError, TypeError):
         return _err(ErrorKind.OTHER, "unexpected answer (no choices[0].message.content)")
+
+
+def n_ctx(cfg: LlmConfig) -> int | None:
+    """Context size of a llama.cpp server (GET <base_url without /v1>/props); None when unknown."""
+    if cfg.provider != "openai":
+        return None
+    url = cfg.base_url.removesuffix("/v1") + "/props"
+    res = _json(_open(cfg, urllib.request.Request(url, headers=_headers(cfg)), PROPS_TIMEOUT))
+    try:
+        n = res.data["default_generation_settings"]["n_ctx"] if res.ok else None
+    except (KeyError, TypeError):
+        return None
+    return n if isinstance(n, int) and n > 0 else None
 
 
 def probe(cfg: LlmConfig) -> Result:

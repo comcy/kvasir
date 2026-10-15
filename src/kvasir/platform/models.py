@@ -31,6 +31,7 @@ class Result(Generic[T]):
     """Data OR error. Provider calls return this and never raise."""
     data: T | None = None
     error: Error | None = None
+    usage: dict | None = None  # llm.complete: token counts of the answer, when the server reports them
 
     @property
     def ok(self) -> bool:
