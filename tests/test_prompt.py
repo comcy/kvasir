@@ -108,6 +108,8 @@ def test_answer_with_search_context_and_history(make_repo, monkeypatch):
         await _send(pilot, "frobnicate")
         await _send(pilot, "again")
         assert "answer 1" in _text(scr) and "answer 2" in _text(scr)
+        qs = [str(w.render()) for w in scr.query(".q")]  # questions carry their own class (background)
+        assert qs == ["> frobnicate", "> again"]
         assert "app.py:1:" in seen[0][0]["content"]
         assert any(m["content"].startswith("answer 1") for m in seen[1])  # session history
 

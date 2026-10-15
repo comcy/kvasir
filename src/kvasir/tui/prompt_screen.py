@@ -18,6 +18,7 @@ class PromptScreen(ModalScreen[None]):
     PromptScreen { align: center middle; }
     PromptScreen > Vertical { width: 90%; height: 90%; border: round $accent; border-title-color: $accent; border-title-style: bold; padding: 0 1; background: $surface; }
     PromptScreen VerticalScroll { height: 1fr; }
+    PromptScreen .q { background: $primary 30%; padding: 0 1; margin-top: 1; text-style: bold; }
     """
     BINDINGS: ClassVar[list[Binding]] = [Binding("escape", "close", "Close")]
 
@@ -30,18 +31,18 @@ class PromptScreen(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            with VerticalScroll():
-                yield Static("", id="log", markup=False)
+            yield VerticalScroll()
             yield Input(placeholder="ask (enter to send, esc to close)")
 
     def on_mount(self) -> None:
         self.query_one(Vertical).border_title = "Ask"
         self.query_one(Input).focus()
 
-    def _say(self, text: str) -> None:
+    def _say(self, text: str, classes: str = "") -> None:
         self.lines.append(text)
-        self.query_one("#log", Static).update("\n".join(self.lines))
-        self.query_one(VerticalScroll).scroll_end(animate=False)
+        box = self.query_one(VerticalScroll)
+        box.mount(Static(text, markup=False, classes=classes))
+        box.scroll_end(animate=False)
 
     def on_input_submitted(self, ev: Input.Submitted) -> None:
         text, ev.input.value = ev.value.strip(), ""
@@ -63,7 +64,7 @@ class PromptScreen(ModalScreen[None]):
         self._ask(text, cfg)
 
     def _ask(self, question: str, cfg: llm.LlmConfig) -> None:
-        self._say(f"> {question}")
+        self._say(f"> {question}", "q")
         self._say("... searching and asking")
 
         def work() -> None:
