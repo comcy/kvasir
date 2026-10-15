@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from kvasir.scratch import is_scratch
 from kvasir.tui.data import format_age
 from kvasir.worktrees import Branch, RepoView, Worktree
 
@@ -75,6 +76,8 @@ def name_width(names: list[str], total: int) -> int:
 
 def entry_name(e: Worktree | Branch) -> str:
     if isinstance(e, Worktree):
+        if is_scratch(e.path):
+            return f"[scratch] {e.path.name}"
         return ("! " + (e.branch or e.path.name)) if e.broken else (e.branch or "(detached)")
     return e.name
 

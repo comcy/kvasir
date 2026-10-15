@@ -33,6 +33,8 @@ from kvasir.repo_url import normalize
 from kvasir.status_view import render, schedule_lines, status_name
 
 app = typer.Typer(name="kvasir", help="Manage Git worktrees across repos.", no_args_is_help=True)
+scratch_app = typer.Typer(help="Detached Scratch-Worktrees: einen Ref isoliert ansehen.", no_args_is_help=True)
+app.add_typer(scratch_app, name="scratch")
 
 
 @app.callback()
@@ -506,3 +508,50 @@ def today(
             raise typer.Exit(1) from None
     else:
         typer.echo(text, nl=False)
+
+
+_RepoOpt = Annotated[Path, typer.Option("--repo", help="Pfad im Repo (Standard: aktuelles Verzeichnis)")]
+
+
+@scratch_app.command("add")
+def scratch_add(ref: str, repo: _RepoOpt = Path()) -> None:
+    """Scratch-Worktree für <ref> anlegen (idempotent), Pfad auf stdout."""
+    from kvasir import scratch
+    try:
+        typer.echo(scratch.add(repo, ref))
+    except RuntimeError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+
+
+@scratch_app.command("list")
+def scratch_list(repo: _RepoOpt = Path()) -> None:
+    """Alle Scratch-Worktrees des Repos."""
+    from kvasir import scratch
+    try:
+        for p in scratch.listing(repo):
+            typer.echo(p)
+    except RuntimeError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+
+
+@scratch_app.command("clean")
+def scratch_clean(
+    ref: Annotated[str | None, typer.Argument()] = None,
+    force: Annotated[bool, typer.Option("--force", help="Auch mit uncommitteten Änderungen entfernen")] = False,
+    repo: _RepoOpt = Path(),
+) -> None:
+    """Einen (<ref>) oder alle Scratch-Worktrees entfernen; dirty nur mit --force."""
+    from kvasir import scratch
+    try:
+        removed, errors = scratch.clean(repo, ref, force)
+    except RuntimeError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    for p in removed:
+        typer.echo(f"removed {p}")
+    for e in errors:
+        typer.echo(e, err=True)
+    if errors:
+        raise typer.Exit(1)

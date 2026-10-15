@@ -16,12 +16,13 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.timer import Timer
 from textual.widgets import Footer, OptionList, Static
 
-from kvasir import daylog, notes, workspace
+from kvasir import daylog, notes, scratch, workspace
 from kvasir.config import RepoConfig, load_local, load_repos
 from kvasir.new_worktree import is_bare_layout
 from kvasir.open_terminal import OpenTerminalError, open_terminal
 from kvasir.platform import Error
 from kvasir.repo_file import patterns_for
+from kvasir.scratch import is_scratch
 from kvasir.sync import fetch, pull
 from kvasir.tui import platform_data, platform_view
 from kvasir.tui.columns import DetailPanel, EntryList, RepoList
@@ -29,7 +30,7 @@ from kvasir.tui.data import RepoRow, load_rows
 from kvasir.tui.layout import data_status, group_entries, header_text, short_name, tilde
 from kvasir.tui.new_worktree_screen import NewWorktreeScreen
 from kvasir.tui.note_screen import NoteScreen
-from kvasir.worktrees import Worktree
+from kvasir.worktrees import Branch, Worktree
 
 
 class KvasirApp(App):
@@ -64,6 +65,8 @@ class KvasirApp(App):
         Binding("t", "suggest_note", "Notiz-KI"),
         Binding("o", "open_workspace", "Workspace"),
         Binding("g", "jump_workspace", "Springen"),
+        Binding("v", "scratch_add", "Scratch"),
+        Binding("d", "scratch_clean", "Scratch weg"),
         Binding("h", "focus_previous", "Left", show=False),
         Binding("l", "focus_next", "Right", show=False),
     ]
@@ -257,7 +260,7 @@ class KvasirApp(App):
     def action_pull(self) -> None:
         i = self.query_one(EntryList).current_entry()
         wt = self.entries[i] if i is not None else None
-        if not isinstance(wt, Worktree) or wt.broken:
+        if not isinstance(wt, Worktree) or wt.broken or is_scratch(wt.path):
             self.notify("select a worktree to pull", severity="warning")
             return
         self._pull(wt.path)
@@ -317,6 +320,8 @@ class KvasirApp(App):
         if ri is None or ei is None or not self.rows[ri].path:
             return
         wt = self.entries[ei]
+        if isinstance(wt, Worktree) and is_scratch(wt.path):
+            return self.notify("Scratch-Worktree: d räumt auf", severity="warning")
         if isinstance(wt, Worktree):
             self.push_screen(RemoveScreen(self.rows[ri].path, wt, self.rows[ri].url), lambda changed: changed and self.action_reload())
 
@@ -421,6 +426,43 @@ class KvasirApp(App):
                 self.action_reload()
 
         self.push_screen(NewWorktreeScreen(row.path, patterns, row.view.branches), done)
+
+    def _selected_entry(self):
+        ri, ei = self.query_one(RepoList).highlighted, self.query_one(EntryList).current_entry()
+        if ri is None or ei is None or ri >= len(self.rows) or not self.rows[ri].path:
+            return None, None
+        return self.rows[ri], self.entries[ei]
+
+    def action_scratch_add(self) -> None:
+        """Detached Scratch-Worktree of the selected Branch/Worktree, then open it. Starts only git + the terminal."""
+        row, e = self._selected_entry()
+        ref = e and (e.name if isinstance(e, Branch) else None if is_scratch(e.path) else e.branch)
+        if not ref:
+            return self.notify("Branch oder Worktree mit Branch wählen", severity="warning")
+        self._scratch_add(row.url, row.path, ref)
+
+    @work(thread=True, group="scratch")
+    def _scratch_add(self, url: str, root: Path, ref: str) -> None:
+        try:
+            path = scratch.add(root, ref)
+        except RuntimeError as err:
+            return self.call_from_thread(self.notify, f"Scratch fehlgeschlagen: {err}", severity="error")
+        self.call_from_thread(self._scratch_added, url, path)
+
+    def _scratch_added(self, url: str, path: Path) -> None:
+        self._mark = (url, path)
+        self.action_reload()
+        self._open(Worktree(path=path), False)
+
+    def action_scratch_clean(self) -> None:
+        row, e = self._selected_entry()
+        if not isinstance(e, Worktree) or not is_scratch(e.path):
+            return self.notify("Scratch-Worktree wählen", severity="warning")
+        try:
+            scratch.remove(row.path, e.path)
+        except RuntimeError as err:  # dirty: only the CLI has --force
+            return self.notify(f"{err}\n(kvasir scratch clean --force)", severity="error", timeout=10)
+        self.action_reload()
 
     def on_option_list_option_highlighted(self, ev: OptionList.OptionHighlighted) -> None:
         if ev.option_list.id == "repos":
