@@ -5,15 +5,18 @@ The result goes to the LLM as context; the model does not call tools. `.env` fil
 """
 from __future__ import annotations
 
+import json
+import os
 import re
 import subprocess
 from datetime import date
 from pathlib import Path
 
 from kvasir import daylog, notes
-from kvasir.config import RepoConfig, load_local, load_repos
+from kvasir.config import RepoConfig, config_dir, load_local, load_repos
 from kvasir.llm import repo_enabled
 
+WAIT = "... searching and asking"  # transient line in the dialog
 TIMEOUT = 15  # seconds per git call
 MAX_TERMS = 4
 MAX_GREP = 15  # lines per repo
@@ -111,3 +114,54 @@ def context(question: str) -> str:
 def messages(question: str, history: list[dict[str, str]]) -> list[dict[str, str]]:
     return [{"role": "system", "content": f"{SYSTEM}\n\n{context(question)}"}, *history,
             {"role": "user", "content": question}]
+
+
+RESERVE = 1024  # tokens left for the answer
+
+
+def fit(msgs: list[dict[str, str]], limit: int) -> tuple[list[dict[str, str]], int]:
+    """Drop the oldest question/answer pairs until the estimate (~4 chars/token) fits limit - RESERVE.
+    Returns (messages, dropped pairs). The system message and the question always stay."""
+    n = 0
+    while len(msgs) > 3 and sum(len(m["content"]) for m in msgs) // 4 > limit - RESERVE:
+        msgs = [msgs[0], *msgs[3:]]
+        n += 1
+    return msgs, n
+
+
+def _hist_file() -> Path:
+    return config_dir() / "ask-history.json"
+
+
+def save_conversation(history: list[dict[str, str]], log: list[tuple[str, str, str]], used: int | None) -> None:
+    """Opt-in (`[llm] keep_history`). Not stored: kind "ctx" (the raw sent system prompts: large, repo excerpts
+    again) and the transient wait line. Best effort, owner-only file. May contain excerpts of repos and notes."""
+    data = {"history": history, "used": used, "log": [list(e) for e in log if e[0] == "say" and e[1] != WAIT]}
+    p = _hist_file()
+    tmp = p.with_name(p.name + ".tmp")
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        tmp.chmod(0o600)
+        os.replace(tmp, p)
+    except OSError:
+        pass
+
+
+def load_conversation() -> tuple[list[dict[str, str]], list[tuple[str, str, str]], int | None]:
+    """(history, log, used); empty when the file is missing or broken."""
+    try:
+        d = json.loads(_hist_file().read_text(encoding="utf-8"))
+        hist = [{"role": str(m["role"]), "content": str(m["content"])} for m in d["history"]]
+        log = [(str(k), str(t), str(c)) for k, t, c in d["log"]]
+        used = d.get("used")
+        return hist, log, used if isinstance(used, int) else None
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return [], [], None
+
+
+def clear_conversation() -> None:
+    try:
+        _hist_file().unlink(missing_ok=True)
+    except OSError:
+        pass
