@@ -327,15 +327,12 @@ kvasir doctor                        # prüft kitty-Fernsteuerung und [workspace
 Einen Branch/Ref isoliert ansehen, ohne Arbeitsstand, Branches oder Remote anzufassen: detached Worktree (`git worktree add --detach`), kein Branch. Gestartet wird nur git, nie Tests, Linter oder Installationen.
 
 ```bash
-cd "$(scripts/git-scratch add feat/x)"   # Pfad auf stdout; als `git scratch` nutzbar, wenn im PATH
-git-scratch list
-git-scratch clean [<ref>] [--force]      # verweigert bei uncommitteten Änderungen
-
-kvasir scratch add feat/x [--repo <pfad>]   # gleiche Konvention wie das Skript
+kvasir scratch add feat/x [--repo <pfad>]
 kvasir scratch list
-kvasir scratch clean [<ref>] [--force]
+kvasir scratch clean [<ref>] [--force]      # verweigert bei uncommitteten Änderungen
 ```
 
+- Das Shell-Skript `git-scratch` (gleiche Konvention) liegt in `comcy/dotfiles` (`scripts/git-scratch`), nicht hier; `kvasir scratch` ist die eingebaute Variante. Der Konventionstest in `tests/test_scratch.py` läuft nur mit `KVASIR_GIT_SCRATCH=<Pfad zum Skript>` und wird sonst übersprungen.
 - Auflösung: lokaler Branch, dann `origin/<ref>`, dann Ref wie angegeben (vorher `git fetch`, Fehler nur Warnung).
 - Pfad: Bare-Layout `<root>/.scratch/<ref mit / -> -->`; normaler Clone `<repo>.scratch/<slug>` als Geschwisterverzeichnis (hält `git status` sauber). Gleicher Ref zweimal gibt den vorhandenen Pfad zurück.
 - TUI: `v` legt für den gewählten Branch/Worktree an und öffnet das Terminal (bzw. Workspace je `open_mode`), `d` räumt den gewählten Scratch-Worktree auf (`[scratch]` in der Liste). Erzwingen nur per CLI mit `--force`.

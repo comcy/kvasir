@@ -1,7 +1,7 @@
 import asyncio
+import os
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -12,7 +12,7 @@ from kvasir.config import LocalConfig, RepoConfig, save_local, save_repos
 from kvasir.tui.app import KvasirApp
 from kvasir.tui.columns import EntryList
 
-SCRIPT = str(Path(__file__).parent.parent / "scripts" / "git-scratch")
+SCRIPT = os.path.expanduser(os.environ.get("KVASIR_GIT_SCRATCH", ""))
 
 
 def sh(cwd, *a):
@@ -64,7 +64,10 @@ def test_cli(root):
     assert CliRunner().invoke(app, ["scratch", "add", "nope", "--repo", str(root)]).exit_code == 1
 
 
-@pytest.mark.skipif(shutil.which("sh") is None, reason="needs sh")
+@pytest.mark.skipif(
+    shutil.which("sh") is None or not os.path.isfile(SCRIPT) or not os.access(SCRIPT, os.X_OK),
+    reason="needs sh and KVASIR_GIT_SCRATCH=<path to git-scratch>",
+)
 def test_script_same_path_and_cleanup(root):
     out = subprocess.run(["sh", SCRIPT, "add", "feat/x"], cwd=root / "main", capture_output=True, text=True, check=True)
     p = root / ".scratch" / "feat--x"
