@@ -237,6 +237,34 @@ command = ["claude", "-p"]
 
 Weitere Befehle (`["ollama", "run", "<modell>"]`, `["gemini", "-p"]`) folgen derselben Form; ob `gemini -p` Prompts per stdin liest, ist **zu prüfen**. Optional `timeout` (Sekunden, Standard 120).
 
+### Lokaler Server auf der GPU (llama.cpp, Vulkan)
+
+Getestet auf AMD RX 6800 XT (16 GB), Arch Linux. Pakete: `llama-cpp`, `ggml-vulkan`, `vulkan-radeon`.
+
+```sh
+# Modell laden (ca. 5 GB, passt mit Kontext komplett in den VRAM)
+mkdir -p ~/models/qwen3-8b-q4 && curl -L --fail -C - -o ~/models/qwen3-8b-q4/Qwen3-8B-Q4_K_M.gguf \
+  https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf
+
+# Server starten (nur localhost; -ngl 99 = alle Schichten auf die GPU)
+llama-server --model ~/models/qwen3-8b-q4/Qwen3-8B-Q4_K_M.gguf \
+  --port 8090 --host 127.0.0.1 -ngl 99 -c 8192 --reasoning off
+```
+
+```toml
+# local.toml
+[llm]
+provider = "openai"
+base_url = "http://localhost:8090/v1"
+model = "/home/<user>/models/qwen3-8b-q4/Qwen3-8B-Q4_K_M.gguf"   # llama-server ignoriert den Namen, doctor prüft ihn
+timeout = 300                                                     # nur nötig bei großen Modellen
+```
+
+- **Prüfen:** `cat /sys/class/drm/card*/device/mem_info_vram_used` zeigt nach dem Start mehrere GB (ca. 6,7 GB). Bleibt der Wert bei ~1 GB, läuft das Modell auf der CPU; dann `llama-server --list-devices` prüfen (`Vulkan0` muss erscheinen). `kvasir doctor` zeigt `llm … reachable`/`available`.
+- **Größe:** Modell + KV-Cache müssen in den VRAM passen. Ein 27B in Q3 (13,5 GB) mit `-c 32768` tut das nicht; der Rechner swappt, die Antworten laufen in den Timeout (`timed out after 120s`). Mit 8B Q4 ca. 65 Tokens/s.
+- **Neue Architekturen:** Hybride Modelle (z. B. Qwen3.8 mit Gated DeltaNet) hängen unter ROCm/HIP oder sind unbrauchbar langsam. Für diese Karte Vulkan (`llama-server`) statt `ollama` mit ROCm verwenden und lieber ein Modell mit klassischer Architektur (Qwen3-8B) nehmen.
+- **Starten nach Reboot:** `llama-server` läuft nicht als Dienst, beim Anmelden manuell oder per eigener Systemd-User-Unit starten.
+
 - **Datenschutz:** Vor dem ersten Senden an einen nicht-lokalen Endpunkt (nicht localhost/privates Netz; `command` gilt immer als nicht lokal) ist eine einmalige Bestätigung nötig; sie wird in `[llm] confirmed` in `local.toml` gespeichert. Pro Repo abschaltbar: `llm = false` im Eintrag in `repos.toml`.
 - **`kvasir doctor`** prüft die Config, die Erreichbarkeit (`GET /models` bzw. Befehl im PATH) und das Modell.
 - Fehler (nicht erreichbar, Modell fehlt, Befehl fehlt, Timeout) kommen als Ergebnis zurück, nicht als Exception. Python-API: `kvasir.llm.complete(messages)`.
