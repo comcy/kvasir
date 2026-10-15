@@ -44,9 +44,18 @@ class LocalConfig:
     report: dict = field(default_factory=dict)  # raw [report] table, parsed/validated by kvasir.report_out
 
 
+class ConfigError(ValueError):
+    """Unreadable config file; message names file, line/column and cause."""
+
+
 def _read(name: str) -> dict:
     p = config_dir() / name
-    return tomllib.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    if not p.exists():
+        return {}
+    try:
+        return tomllib.loads(p.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as e:  # message already ends in "(at line L, column C)"
+        raise ConfigError(f"{p}: {e}") from e
 
 
 def _write(name: str, text: str) -> None:

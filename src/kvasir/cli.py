@@ -14,6 +14,7 @@ from kvasir.clone import clone_bare
 from kvasir.config import (
     DEFAULT_FETCH_MINUTES,
     DEFAULT_PATTERNS,
+    ConfigError,
     RepoConfig,
     config_dir,
     default_open_command,
@@ -35,8 +36,16 @@ app = typer.Typer(name="kvasir", help="Manage Git worktrees across repos.", no_a
 
 
 @app.callback()
-def main() -> None:
+def main(ctx: typer.Context) -> None:
     """Manage Git worktrees across repos."""
+    if ctx.invoked_subcommand == "doctor":  # doctor reports broken config itself
+        return
+    try:  # one place for every command and the TUI start: no traceback on a broken config file
+        load_repos()
+        load_local()
+    except ConfigError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1) from e
 
 
 @app.command()
