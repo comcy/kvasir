@@ -99,11 +99,24 @@ def _blend(color: str, k: float = 0.18, base: int = 0x10) -> str:
     return "#" + "".join(f"{round(base + (int(color[i:i + 2], 16) - base) * k):02x}" for i in (1, 3, 5))
 
 
+AI_SHARE = 45   # percent of the width for the AI pane (kvasir keeps ~55)
+GIT_SHARE = 30  # percent of the height for the git strip
+
+
+def keep_shell(ai: list[str], win: bool = False) -> list[str]:
+    """Run `ai`, then leave the user's shell in the pane whatever the exit code. posix: the command is
+    passed as "$@", never interpolated. PowerShell has no "$@" and -Command takes text, so each argument
+    is single-quoted (`'` doubled) and `-NoExit` keeps the shell."""
+    if win:
+        return ["powershell", "-NoExit", "-Command", "& " + " ".join("'" + a.replace("'", "''") + "'" for a in ai)]
+    return ["sh", "-c", '"$@"; exec "${SHELL:-sh}"', "sh", *ai]
+
+
 def wt_argv(path: Path, tab_title: str, ai: list[str], layout: str = "columns", color: str | None = None) -> list[str]:
     """One wt call; each `;` is its own argument (wt's subcommand separator, no shell involved)."""
     p = str(path)
-    ai_pane = ["sp", "-V", "-s", "0.7", "-d", p, "--title", "ai", *ai]
-    git_pane = ["sp", "-H", "-s", "0.3", "-d", p, "--title", "git"]
+    ai_pane = ["sp", "-V", "-s", f"{AI_SHARE / 100:g}", "-d", p, "--title", "ai", *keep_shell(ai, win=True)]
+    git_pane = ["sp", "-H", "-s", f"{GIT_SHARE / 100:g}", "-d", p, "--title", "git"]
     first = ["-w", "0", "nt", "-d", p, "--title", tab_title, *(["--tabColor", color] if color else []),
              *kvasir_argv(path)]
     if layout == "bottom":  # git strip first (full width), back to kvasir, then split the top row
@@ -124,9 +137,12 @@ def kitty_steps(path: Path, tab_title: str, ai: list[str], layout: str = "column
         return [*base, "--type=window", f"--location={loc}", f"--bias={bias}", "--match", "window_id:{kvasir}",
                 "--next-to", f"id:{{{near}}}", "--title", title, *cmd]
 
+    shell_ai = keep_shell(ai)
     if layout == "bottom":
-        return [tab, layout_step, win("hsplit", 30, "kvasir", "git"), win("vsplit", 70, "kvasir", "ai", *ai)]
-    return [tab, layout_step, win("vsplit", 70, "kvasir", "ai", *ai), win("hsplit", 30, "ai", "git")]
+        return [tab, layout_step, win("hsplit", GIT_SHARE, "kvasir", "git"),
+                win("vsplit", AI_SHARE, "kvasir", "ai", *shell_ai)]
+    return [tab, layout_step, win("vsplit", AI_SHARE, "kvasir", "ai", *shell_ai),
+            win("hsplit", GIT_SHARE, "ai", "git")]
 
 
 def kitty_color_steps(color: str, tint: bool = False) -> list[list[str]]:
