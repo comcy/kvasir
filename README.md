@@ -272,6 +272,56 @@ timeout = 300                                                     # nur nötig b
 - Fehler (nicht erreichbar, Modell fehlt, Befehl fehlt, Timeout) kommen als Ergebnis zurück, nicht als Exception. Python-API: `kvasir.llm.complete(messages)`.
 - **Vorschläge (Worktree markieren):** `c` schlägt eine Conventional-Commit-Message aus `git diff --staged` vor (leer = Meldung, kein LLM-Aufruf); der Text ist editierbar, `Enter` fragt nach, ein zweites `Enter` führt `git commit -m` im Worktree aus (Autor und Hooks aus der git-Konfig, nie `--no-verify`/`--amend`; Fehler werden angezeigt). `t` schlägt eine Notiz aus Tageslog und `git diff HEAD` vor; `Enter` speichert sie als Notiz des Branches. `Esc` bricht jeweils ab. Diffs sind auf 20000 Zeichen begrenzt, `.env`-Dateien ausgenommen.
 
+## Workspace (experimentell)
+
+Pro Worktree ein Terminal-Tab im IDE-Stil: kvasir links, AI-Session rechts oben, git-Shell darunter. Opt-in, wird auf dem Branch `feat/workspace` getestet (nicht auf `main`). Taste `o` im TUI öffnet den Workspace; mit `open_mode = "workspace"` tut das auch Enter.
+
+kvasir und AI-Pane sind etwa gleich breit (~55/45), der git-Streifen ~30 %. Endet der AI-Befehl (auch mit Fehler, z. B. weil `claude --continue` keine Session findet), bleibt im AI-Pane eine interaktive Shell im Worktree (`$SHELL`; unter Windows Terminal PowerShell mit `-NoExit`), aus der du selbst eine Session startest.
+
+```toml
+[workspace]
+layout = "columns"                      # "columns" | "bottom" (git-Shell über die volle Breite)
+ai_command = "claude"                   # Neustart
+ai_resume_command = "claude --continue" # Standard beim Start
+open_mode = "terminal"                  # "terminal" | "workspace"
+tint = false                            # kitty: Fensterhintergrund in Repo-Farbe tönen
+```
+
+- **kitty:** `allow_remote_control yes`, `enabled_layouts splits,stack` und `listen_on unix:/tmp/kitty-{kitty_pid}` in `kitty.conf` (kitty neu starten). kvasir nutzt `kitten @ launch`. Ohne `listen_on` läuft `kitten @` über das TTY der TUI: kvasir pausiert die TUI dann kurz beim Öffnen.
+- **Windows Terminal:** `wt -w 0 nt …` mit `sp`-Splits, keine weiteren Voraussetzungen.
+- Anderes Terminal: Hinweis und normales Öffnen (`open_command`).
+- **Sessions:** kvasir merkt sich offene Workspaces (`workspaces.json` im Konfigurationsverzeichnis; verwaiste Einträge verschwinden beim Laden). Worktrees mit offenem Workspace tragen `●` in der Repo-Farbe; `g` springt in kitty zum Tab (`kitten @ focus-tab`), in Windows Terminal geht das nicht (nur Hinweis "zuletzt geöffnet").
+- **Farbe:** pro Repo ein stabiler Hash der URL auf eine feste Palette (Repo-Name im TUI, Tab-Farbe per `set-tab-color` bzw. `--tabColor`); Override mit `color = "#rrggbb"` im Eintrag in `repos.toml`. `tint = true` in `[workspace]` tönt in kitty zusätzlich den Fensterhintergrund (Standard `false`, setzt dunklen Hintergrund voraus).
+- Im Tab startet `kvasir tui --select <pfad>` mit vorgewähltem Worktree. `kvasir doctor` prüft `[workspace]` und die kitty-Fernsteuerung.
+
+### Einrichtung auf einem neuen Rechner
+
+`~/.config/kitty/kitty.conf` (kitty danach komplett neu starten):
+
+```conf
+# zwingend
+allow_remote_control yes
+listen_on unix:/tmp/kitty-{kitty_pid}
+enabled_layouts splits,stack
+
+# optional
+tab_bar_style powerline
+tab_bar_min_tabs 1
+confirm_os_window_close 0
+```
+
+```sh
+uv tool install --force git+https://github.com/comcy/kvasir@feat/workspace
+gh auth login
+claude                               # einmal einloggen (AI-Session)
+kvasir setup ~/Workspace/<repo>      # pro Repo
+kvasir doctor                        # prüft kitty-Fernsteuerung und [workspace]
+```
+
+- `[workspace]` in `local.toml` (Pfad: `kvasir doctor`) wie oben; die Datei wird nicht synchronisiert und muss auf dem neuen Rechner neu angelegt werden.
+- `open_command` ist nicht nötig (Standard `kitty --directory {path}`). Außerhalb von kitty (`KITTY_WINDOW_ID` fehlt) fällt `o` auf normales Öffnen zurück.
+- `[report]` und `[llm]` nur nötig, wenn `kvasir today` bzw. die LLM-Funktionen genutzt werden.
+
 ## Konfiguration
 
 Zwei Dateien, Verzeichnis je Betriebssystem:

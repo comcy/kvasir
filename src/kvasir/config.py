@@ -34,6 +34,7 @@ class RepoConfig:
     platform_interval: int = DEFAULT_PLATFORM_MINUTES  # minutes, PR/issue/pipeline refresh
     patterns_set: bool = True  # False = no local choice, kvasir.toml [branches] decides (see repo_file)
     llm: bool = True  # False = opt-out: no LLM function may send this repo's data (repos.toml `llm = false`)
+    color: str | None = None  # "#rrggbb" override of the hashed repo color (see workspace.repo_color)
 
 
 @dataclass
@@ -42,6 +43,7 @@ class LocalConfig:
     paths: dict[str, str] = field(default_factory=dict)  # repo URL -> local path
     llm: dict = field(default_factory=dict)  # raw [llm] table, parsed/validated by kvasir.llm
     report: dict = field(default_factory=dict)  # raw [report] table, parsed/validated by kvasir.report_out
+    workspace: dict = field(default_factory=dict)  # raw [workspace] table, parsed/validated by kvasir.workspace
 
 
 class ConfigError(ValueError):
@@ -68,6 +70,12 @@ def _q(s: str) -> str:
     return json.dumps(s)  # JSON string escaping is valid TOML basic-string escaping
 
 
+def _color(v) -> str | None:
+    """`#rrggbb` or None (invalid values are ignored, the hash color applies)."""
+    ok = isinstance(v, str) and len(v) == 7 and v[0] == "#" and all(c in "0123456789abcdefABCDEF" for c in v[1:])
+    return v.lower() if ok else None
+
+
 def load_repos() -> dict[str, RepoConfig]:
     return {
         url: RepoConfig(
@@ -76,6 +84,7 @@ def load_repos() -> dict[str, RepoConfig]:
             platform_interval=int(v.get("platform_interval", DEFAULT_PLATFORM_MINUTES)),
             patterns_set="branch_patterns" in v,
             llm=bool(v.get("llm", True)),
+            color=_color(v.get("color")),
         )
         for url, v in _read("repos.toml").items()
     }
@@ -87,14 +96,15 @@ def save_repos(repos: dict[str, RepoConfig]) -> None:
         patterns = ", ".join(_q(p) for p in c.branch_patterns)
         pat = f"branch_patterns = [{patterns}]\n" if c.patterns_set else ""
         out.append(f"[{_q(url)}]\n{pat}fetch_interval = {c.fetch_interval}\n"
-                   f"platform_interval = {c.platform_interval}\n" + ("" if c.llm else "llm = false\n"))
+                   f"platform_interval = {c.platform_interval}\n" + ("" if c.llm else "llm = false\n")
+                   + (f"color = {_q(c.color)}\n" if c.color else ""))
     _write("repos.toml", "\n".join(out))
 
 
 def load_local() -> LocalConfig:
     raw = _read("local.toml")
     return LocalConfig(open_command=raw.get("open_command"), paths=dict(raw.get("repos", {})),
-                       llm=dict(raw.get("llm", {})), report=dict(raw.get("report", {})))
+                       llm=dict(raw.get("llm", {})), report=dict(raw.get("report", {})), workspace=dict(raw.get("workspace", {})))
 
 
 def save_local(c: LocalConfig) -> None:
@@ -108,4 +118,7 @@ def save_local(c: LocalConfig) -> None:
     if c.report:  # values: str
         out.append("\n[report]")
         out += [f"{k} = {json.dumps(v)}" for k, v in c.report.items()]
+    if c.workspace:  # values: str or list of str
+        out.append("\n[workspace]")
+        out += [f"{k} = {json.dumps(v)}" for k, v in c.workspace.items()]
     _write("local.toml", "\n".join(out) + "\n")
