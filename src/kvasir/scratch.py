@@ -1,4 +1,4 @@
-"""Scratch-Worktrees: detached view of a ref, never a branch. Same convention as scripts/git-scratch.
+"""Scratch-Worktrees: detached view of a ref, never a branch. Same convention as scripts/git-scratch in comcy/dotfiles.
 
 Starts nothing but git: no tests, linters, installs. No Textual.
 """
