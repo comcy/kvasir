@@ -3,7 +3,12 @@ import subprocess
 import pytest
 from conftest import sh
 
-from kvasir.new_worktree import NewWorktreeError, add_worktree, default_branch
+from kvasir.new_worktree import (
+    NewWorktreeError,
+    add_worktree,
+    add_worktree_moving_changes,
+    default_branch,
+)
 
 G = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
 
@@ -79,3 +84,69 @@ def test_directory_exists(repo):
 def test_normal_clone_rejected(make_repo):
     with pytest.raises(NewWorktreeError, match="Bare-Layout"):
         add_worktree(make_repo("n"), "x", base="main")
+
+
+def _dirty_main(repo):
+    main = repo / "main"
+    (main / "t").write_text("1\n")
+    (main / "u").write_text("1\n")
+    sh(main, "git", "add", "t", "u")
+    sh(main, *G, "commit", "-q", "-m", "files")
+    (main / "t").write_text("2\n")                # staged
+    sh(main, "git", "add", "t")
+    (main / "u").write_text("2\n")                # unstaged
+    (main / "new.txt").write_text("x\n")          # untracked
+    return main
+
+
+def test_move_changes(repo):
+    from kvasir.worktrees import read_repo
+    main = _dirty_main(repo)
+    path = add_worktree_moving_changes(repo, "feat/x", "main", main)
+    wt = next(w for w in read_repo(repo).worktrees if w.path == path)
+    assert (wt.staged, wt.unstaged, wt.untracked) == (1, 1, 1)
+    assert (path / "new.txt").read_text() == "x\n"
+    assert out(main, "status", "--porcelain") == ""
+    assert out(repo / "main", "stash", "list") == ""
+
+
+def test_move_keeps_foreign_stash(repo):
+    main = repo / "main"
+    (main / "t").write_text("1\n")
+    sh(main, "git", "add", "t")
+    sh(main, *G, "commit", "-q", "-m", "t")
+    (main / "t").write_text("3\n")
+    sh(main, "git", "stash", "push", "-m", "foreign")
+    (main / "t").write_text("9\n")
+    add_worktree_moving_changes(repo, "feat/x", "main", main)
+    lst = out(repo / "main", "stash", "list").splitlines()
+    assert len(lst) == 1 and "foreign" in lst[0]
+
+
+def test_move_clean_source_is_plain_add(repo):
+    path = add_worktree_moving_changes(repo, "feat/x", "main", repo / "main")
+    assert path.is_dir() and out(repo / "main", "stash", "list") == ""
+
+
+def test_move_add_fails_restores_source(repo):
+    main = _dirty_main(repo)
+    with pytest.raises(NewWorktreeError, match="restored"):
+        add_worktree_moving_changes(repo, "feat/x", "nope", main)
+    assert len(out(main, "status", "--porcelain").splitlines()) == 3
+    assert (main / "new.txt").exists() and len(out(repo / "main", "stash", "list").splitlines()) == 1
+
+
+def test_move_conflict_keeps_stash_and_restores(repo):
+    main = repo / "main"
+    (main / "t").write_text("1\n")
+    sh(main, "git", "add", "t")
+    sh(main, *G, "commit", "-q", "-m", "t")
+    sh(repo, *G, "worktree", "add", "-q", "-b", "other", "other", "main")
+    (repo / "other" / "t").write_text("other\n")
+    sh(repo / "other", *G, "commit", "-qam", "diverge")
+    (main / "t").write_text("mine\n")
+    with pytest.raises(NewWorktreeError, match="applying changes"):
+        add_worktree_moving_changes(repo, "feat/x", "other", main)
+    assert (main / "t").read_text() == "mine\n"
+    assert not (repo / "feat/x").exists() and "feat/x" not in branches(repo)
+    assert len(out(repo / "main", "stash", "list").splitlines()) == 1

@@ -107,7 +107,7 @@ Drei Spalten, von links nach rechts verfeinert: **Repos → Worktrees/Branches �
 | `↑` `↓` | Auswahl |
 | `h` / `l` | Spalte links / rechts |
 | `Enter` | Terminal im Worktree öffnen (`open_command`) |
-| `n` | Neuen Worktree anlegen (bestehender oder neuer Branch, Namensprüfung) |
+| `n` | Neuen Worktree anlegen (bestehender oder neuer Branch, Namensprüfung). Hat der fokussierte Worktree uncommittete Änderungen (staged, unstaged, untracked), zeigt das Formular eine Checkbox »Move N uncommitted changes«: an (Standard) = per `git stash --include-untracked` in den neuen Worktree verschieben (Quell-Worktree danach sauber, Move statt Kopie), aus = nichts wird angefasst. Scheitert Anlegen oder Anwenden (z. B. Konflikt), wird alles zurückgebaut, der Quell-Worktree wiederhergestellt und der Stash bleibt erhalten (Meldung nennt den Commit-Hash) |
 | `x` | Worktree entfernen (verweigert bei ungesicherter Arbeit) |
 | `f` | Alle Repos jetzt fetchen (`git fetch --prune`) |
 | `p` | Markierten Worktree pullen (`--ff-only`, nie Merge/Rebase) |

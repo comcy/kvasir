@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import uuid
 from pathlib import Path
 
 
@@ -85,4 +86,44 @@ def add_worktree(root: Path, branch: str, base: str | None = None) -> Path:
         if args and _ref_exists(root, f"refs/heads/{name}"):
             _git(root, "branch", "-D", "--", name)  # only reached for a Branch created by this call
         raise NewWorktreeError(r.stderr.strip() or "git worktree add failed")
+    return path
+
+
+def add_worktree_moving_changes(root: Path, branch: str, base: str | None, source: Path) -> Path:
+    """Like add_worktree, but moves the uncommitted changes (incl. untracked) of Worktree `source` into the new one.
+
+    The own stash is addressed by commit hash (the stash stack is shared by all Worktrees). Any failure
+    restores `source`, removes what was created and keeps the stash; the error names its hash.
+    """
+    tag = f"kvasir-move-{uuid.uuid4().hex}"
+    r = _git(source, "stash", "push", "--include-untracked", "-m", tag)
+    if r.returncode != 0:
+        raise NewWorktreeError(f"stashing changes failed: {r.stderr.strip()}")
+    sha = next((ln.split()[0] for ln in _git(source, "stash", "list", "--format=%H %gs").stdout.splitlines()
+                if ln.endswith(tag)), None)
+    if sha is None:
+        return add_worktree(root, branch, base)  # nothing to move
+
+    def restore(why: str) -> NewWorktreeError:
+        back = _git(source, "stash", "apply", "--index", sha)
+        if back.returncode != 0:
+            return NewWorktreeError(f"{why}; could not restore {source} either, changes kept in stash commit {sha}")
+        return NewWorktreeError(f"{why}; changes restored in {source} (stash commit {sha} kept)")
+
+    branch_before = base is not None and _ref_exists(root, f"refs/heads/{branch}")
+    try:
+        path = add_worktree(root, branch, base)
+    except NewWorktreeError as e:
+        raise restore(str(e)) from e
+    r = _git(path, "stash", "apply", "--index", sha)
+    if r.returncode != 0:
+        _git(root, "worktree", "remove", "--force", "--", str(path))
+        shutil.rmtree(path, ignore_errors=True)
+        if base is not None and not branch_before:
+            _git(root, "branch", "-D", "--", branch)
+        raise restore(f"applying changes in the new Worktree failed: {(r.stderr or r.stdout).strip()}")
+    for i, ln in enumerate(_git(source, "stash", "list", "--format=%H").stdout.split()):
+        if ln == sha:
+            _git(source, "stash", "drop", f"stash@{{{i}}}")
+            break
     return path
