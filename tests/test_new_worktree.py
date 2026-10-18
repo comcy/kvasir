@@ -150,3 +150,11 @@ def test_move_conflict_keeps_stash_and_restores(repo):
     assert (main / "t").read_text() == "mine\n"
     assert not (repo / "feat/x").exists() and "feat/x" not in branches(repo)
     assert len(out(repo / "main", "stash", "list").splitlines()) == 1
+
+
+def test_new_branch_from_remote_base_has_no_upstream(repo):
+    sh(repo, "git", "update-ref", "refs/remotes/origin/feat/b", "main")
+    p = add_worktree(repo, "fix/nt", base="origin/feat/b")
+    assert out(p, "rev-parse", "HEAD") == out(repo / "main", "rev-parse", "HEAD")
+    r = subprocess.run(["git", "-C", str(repo), "config", "--get", "branch.fix/nt.merge"], check=False, capture_output=True, text=True)
+    assert r.returncode != 0 and not r.stdout
