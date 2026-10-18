@@ -47,13 +47,15 @@ class NewWorktreeScreen(ModalScreen["Path | None"]):
     BINDINGS: ClassVar[list[Binding]] = [Binding("escape", "cancel", "Cancel")]
 
     def __init__(self, root: Path, patterns: list[str], branches: list[Branch],
-                 source: Worktree | None = None) -> None:
+                 source: Worktree | None = None, focus: Branch | Worktree | None = None) -> None:
         super().__init__()
         self.root, self.patterns, self.branches = root, patterns, branches
         try:
             self.base = default_branch(root)
         except NewWorktreeError:
             self.base = ""
+        # focused Branch / Worktree with Branch = default base; else the default branch
+        self.base = (focus.name if isinstance(focus, Branch) else focus.branch if focus else None) or self.base
         n = source.staged + source.unstaged + source.untracked if source else 0
         self.source = source if n else None
         self.n_changes = n

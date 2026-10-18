@@ -86,8 +86,8 @@ def add_worktree(root: Path, branch: str, base: str | None = None) -> Path:
         if _ref_exists(root, f"refs/heads/{name}"):
             raise NewWorktreeError(f"branch {name!r} already exists")
         if _git(root, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").returncode != 0:
-            raise NewWorktreeError(f"base branch {base!r} not found")
-        args, commitish = ["-b", name], base
+            raise NewWorktreeError(f"base branch {base!r} not found (remote branch? run git fetch)")
+        args, commitish = ["--no-track", "-b", name], base  # no upstream on the base: push must not target it
     if (other := _checked_out(root).get(name)) is not None:
         raise NewWorktreeError(f"branch {name!r} is already checked out in {other}")
     path = root / name

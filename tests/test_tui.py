@@ -319,3 +319,27 @@ def test_new_worktree_dialog_free_name_and_base(make_repo):
             assert (root / "spike" / "my-own-name").is_dir()
 
     asyncio.run(run())
+
+
+def test_new_worktree_from_defaults_to_focused_entry(make_repo):
+    from textual.widgets import Input
+
+    from kvasir.tui.new_worktree_screen import NewWorktreeScreen
+
+    root = _register(make_repo)
+    cases = [(None, "main"), (Branch("feat/x", False, None, ""), "feat/x"),
+             (Branch("origin/feat/x", True, None, ""), "origin/feat/x"),
+             (Worktree(path=root / "w", branch="feat/w"), "feat/w"),
+             (Worktree(path=root / "w"), "main"), (Worktree(path=root / "w", branch=None), "main")]
+
+    async def run():
+        app = KvasirApp()
+        async with app.run_test(size=(100, 40)) as pilot:
+            for focus, want in cases:
+                await app.push_screen(NewWorktreeScreen(root, [], [], None, focus))
+                await pilot.pause()
+                assert app.screen.query_one("#base", Input).value == want
+                app.screen.dismiss(None)
+                await pilot.pause()
+
+    asyncio.run(run())
