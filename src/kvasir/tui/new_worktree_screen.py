@@ -9,11 +9,16 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Select
+from textual.widgets import Button, Checkbox, Input, Label, Select
 
 from kvasir.branch_names import TYPES, build, matches, slugify, suggest
-from kvasir.new_worktree import NewWorktreeError, add_worktree, default_branch
-from kvasir.worktrees import Branch
+from kvasir.new_worktree import (
+    NewWorktreeError,
+    add_worktree,
+    add_worktree_moving_changes,
+    default_branch,
+)
+from kvasir.worktrees import Branch, Worktree
 
 NEW = "\0new"  # Select value for "new branch"
 
@@ -28,13 +33,17 @@ class NewWorktreeScreen(ModalScreen["Path | None"]):
     """
     BINDINGS: ClassVar[list[Binding]] = [Binding("escape", "cancel", "Cancel")]
 
-    def __init__(self, root: Path, patterns: list[str], branches: list[Branch]) -> None:
+    def __init__(self, root: Path, patterns: list[str], branches: list[Branch],
+                 source: Worktree | None = None) -> None:
         super().__init__()
         self.root, self.patterns, self.branches = root, patterns, branches
         try:
             self.base = default_branch(root)
         except NewWorktreeError:
             self.base = ""
+        n = source.staged + source.unstaged + source.untracked if source else 0
+        self.source = source if n else None
+        self.n_changes = n
         self._forced: str | None = None  # name the user already saw a warning for
 
     def compose(self) -> ComposeResult:
@@ -48,6 +57,9 @@ class NewWorktreeScreen(ModalScreen["Path | None"]):
                 yield Input(placeholder="Title", id="title")
                 yield Input(self.base, placeholder="Base branch", id="base")
                 yield Label("", id="name")
+            if self.source:
+                yield Checkbox(f"Move {self.n_changes} uncommitted changes from {self.source.path.name}",
+                               True, id="move")
             yield Label("", id="warn")
             yield Label("", id="error")
             yield Button("Create (Enter)", id="ok", variant="primary")
@@ -104,6 +116,9 @@ class NewWorktreeScreen(ModalScreen["Path | None"]):
                             + (f" Suggestion: {hint}." if hint else "") + " Enter again to create anyway.")
                 return
         try:
-            self.dismiss(add_worktree(self.root, branch, base))
+            if self.source and self.query_one("#move", Checkbox).value:
+                self.dismiss(add_worktree_moving_changes(self.root, branch, base, self.source.path))
+            else:
+                self.dismiss(add_worktree(self.root, branch, base))
         except NewWorktreeError as e:
             err.update(str(e))

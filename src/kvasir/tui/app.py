@@ -425,7 +425,9 @@ class KvasirApp(App):
                 self._mark = (row.url, path)
                 self.action_reload()
 
-        self.push_screen(NewWorktreeScreen(row.path, patterns, row.view.branches), done)
+        _, e = self._selected_entry()
+        source = e if isinstance(e, Worktree) and not is_scratch(e.path) and not e.broken else None
+        self.push_screen(NewWorktreeScreen(row.path, patterns, row.view.branches, source), done)
 
     def _selected_entry(self):
         ri, ei = self.query_one(RepoList).highlighted, self.query_one(EntryList).current_entry()
