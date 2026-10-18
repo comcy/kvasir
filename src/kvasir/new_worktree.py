@@ -30,6 +30,23 @@ def default_branch(root: Path) -> str:
     return r.stdout.strip()
 
 
+def base_hint(root: Path, base: str) -> str:
+    """`main (abc1234)` or `main (unknown ref)`."""
+    r = _git(root, "rev-parse", "--short", "--verify", "--quiet", f"{base}^{{commit}}")
+    return f"{base} ({r.stdout.strip()})" if r.returncode == 0 and base else f"{base or '?'} (unknown ref)"
+
+
+def repo_root(path: Path) -> Path:
+    """Bare-Layout root from any path inside the Repo (also from within a Worktree)."""
+    r = _git(path, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    if r.returncode != 0:
+        raise NewWorktreeError(f"not a git repository: {path}")
+    common = Path(r.stdout.strip())
+    if common.name != ".bare" or not is_bare_layout(common.parent):
+        raise NewWorktreeError(f"not a Bare-Layout Repo (.bare/ + .git file): {path}")
+    return common.parent
+
+
 def _checked_out(root: Path) -> dict[str, str]:
     """branch -> worktree path."""
     out = _git(root, "worktree", "list", "--porcelain").stdout

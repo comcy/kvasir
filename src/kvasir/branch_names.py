@@ -1,4 +1,5 @@
 """Branch-Vorlagen: Prüfung, Namensbau, Korrekturvorschlag. Reine Logik."""
+import datetime
 import re
 import unicodedata
 from difflib import SequenceMatcher
@@ -39,6 +40,12 @@ def build(pattern: str, **fields: str) -> str:
     """Setzt Felder in die Vorlage ein; fehlendes Feld -> KeyError."""
     compile_pattern(pattern)  # validiert Platzhalter
     return pattern.format(**fields)
+
+
+def auto_name(pattern: str, type_: str, id_: str, title: str) -> str:
+    """Template + form fields -> proposed Branch name (date = today)."""
+    return build(pattern, type=type_, id=id_.strip(), slug=slugify(title),
+                 date=datetime.datetime.now().astimezone().date().isoformat())
 
 
 class _Keep(dict):

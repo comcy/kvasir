@@ -35,6 +35,8 @@ from kvasir.status_view import render, schedule_lines, status_name
 app = typer.Typer(name="kvasir", help="Manage Git worktrees across repos.", no_args_is_help=True)
 scratch_app = typer.Typer(help="Detached Scratch-Worktrees: einen Ref isoliert ansehen.", no_args_is_help=True)
 app.add_typer(scratch_app, name="scratch")
+worktree_app = typer.Typer(help="Worktrees anlegen.", no_args_is_help=True)
+app.add_typer(worktree_app, name="worktree")
 
 
 @app.callback()
@@ -555,3 +557,18 @@ def scratch_clean(
         typer.echo(e, err=True)
     if errors:
         raise typer.Exit(1)
+
+
+@worktree_app.command("add")
+def worktree_add(
+    branch: Annotated[str | None, typer.Argument(help="Branch = Ordnername; vorhanden -> Worktree dafür, sonst neu")] = None,
+    from_: Annotated[str | None, typer.Option("--from", help="Basis für neuen Branch (Standard: Default-Branch)")] = None,
+    move_changes: Annotated[bool | None, typer.Option(
+        "--move-changes/--no-move-changes", help="Uncommittete Änderungen des aktuellen Worktrees verschieben")] = None,
+    force_name: Annotated[bool, typer.Option("--force-name", help="Namensvorlagen ignorieren")] = False,
+    repo: _RepoOpt = Path(),
+    interactive: Annotated[bool, typer.Option("--interactive", "-i", help="Fehlendes auf dem Terminal abfragen")] = False,
+) -> None:
+    """Worktree anlegen (ohne TUI); Pfad auf stdout, Meldungen auf stderr."""
+    from kvasir import worktree_add as wa
+    typer.echo(wa.run(branch, from_, move_changes, force_name, repo, interactive))
