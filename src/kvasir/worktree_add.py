@@ -74,6 +74,8 @@ def run(branch: str | None, from_: str | None, move: bool | None, force_name: bo
         n = source.staged + source.unstaged + source.untracked if source else 0
         return _create(root, [b.name for b in view.branches], _patterns(root), source if n else None, n,
                        branch, from_, move, force_name, interactive)
+    except typer.Exit:  # already reported by _fail (click's Exit is a RuntimeError: don't report it twice)
+        raise
     except (typer.Abort, EOFError) as e:
         _say("aborted, nothing created")
         raise typer.Exit(1) from e

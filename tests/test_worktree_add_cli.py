@@ -80,6 +80,7 @@ def test_repo_from_inside_worktree(root, monkeypatch):
 def test_name_violation_suggestion_and_force(root):
     r = run("Foo_Bar", "--repo", str(root))
     assert r.exit_code == 1 and "suggestion" in r.stderr and not r.stdout
+    assert r.stderr.count("error:") == 1  # reported once, not again as "error: 1"
     r = run("Foo_Bar", "--force-name", "--repo", str(root))
     assert r.exit_code == 0, r.stderr
 
