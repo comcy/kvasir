@@ -7,13 +7,14 @@ from typing import ClassVar
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical
+from textual.containers import Container, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Input, Label, Select
 
 from kvasir.branch_names import TYPES, build, matches, slugify, suggest
 from kvasir.new_worktree import (
     NewWorktreeError,
+    _git,
     add_worktree,
     add_worktree_moving_changes,
     default_branch,
@@ -26,8 +27,21 @@ NEW = "\0new"  # Select value for "new branch"
 class NewWorktreeScreen(ModalScreen["Path | None"]):
     DEFAULT_CSS = """
     NewWorktreeScreen { align: center middle; }
-    #dialog { width: 70; max-width: 95%; height: auto; max-height: 95%; padding: 1 2;
+    #dialog { width: 72; max-width: 95%; height: auto; max-height: 95%; padding: 0 2;
               border: round $accent; border-title-color: $accent; border-title-style: bold; background: $surface; overflow-y: auto; }
+    #dialog .row { layout: horizontal; height: 1; }
+    #dialog #new { height: auto; }
+    #dialog .k { width: 9; color: $text-muted; }
+    #dialog .k2 { width: auto; margin: 0 1; color: $text-muted; }
+    #dialog Input, #dialog Select, #dialog SelectCurrent { border: none; height: 1; padding: 0 1; }
+    #dialog Input, #dialog SelectCurrent { background: $boost; }
+    #dialog Select { width: 1fr; }
+    #dialog #type { width: 14; }
+    #dialog #id { width: 20; }
+    #dialog #fullname { width: 1fr; }
+    #dialog #title { width: 1fr; }
+    #dialog Button { height: 1; border: none; min-width: 20; margin-top: 1; }
+    #dialog Checkbox { border: none; height: 1; padding: 0; }
     #warn { color: $warning; }
     #error { color: $error; }
     """
@@ -45,17 +59,33 @@ class NewWorktreeScreen(ModalScreen["Path | None"]):
         self.source = source if n else None
         self.n_changes = n
         self._forced: str | None = None  # name the user already saw a warning for
+        self._auto = ""  # last generated name
+        self._edited = False  # the user typed their own name: stop overwriting it
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
-            yield Select([("(new branch)", NEW), *((b.name, b.name) for b in self.branches)],
-                         value=NEW, allow_blank=False, id="branch")
+            with Container(classes="row"):
+                yield Label("Branch", classes="k")
+                yield Select([("(new branch)", NEW), *((b.name, b.name) for b in self.branches)],
+                             value=NEW, allow_blank=False, id="branch")
             with Vertical(id="new"):
-                yield Select([(p, p) for p in self.patterns], allow_blank=False, id="template")
-                yield Select([(t, t) for t in TYPES], value=TYPES[0], allow_blank=False, id="type")
-                yield Input(placeholder="ID (1234 / ABC-123)", id="id")
-                yield Input(placeholder="Title", id="title")
-                yield Input(self.base, placeholder="Base branch", id="base")
+                if self.patterns:
+                    with Container(classes="row"):
+                        yield Label("Template", classes="k")
+                        yield Select([(p, p) for p in self.patterns], allow_blank=False, id="template")
+                        yield Label("Type", classes="k2")
+                        yield Select([(t, t) for t in TYPES], value=TYPES[0], allow_blank=False, id="type")
+                    with Container(classes="row"):
+                        yield Label("ID", classes="k")
+                        yield Input(placeholder="1234 / ABC-123", id="id")
+                        yield Label("Title", classes="k2")
+                        yield Input(placeholder="Title", id="title")
+                with Container(classes="row"):
+                    yield Label("Name", classes="k")
+                    yield Input(placeholder="branch name (also the worktree folder)", id="fullname")
+                with Container(classes="row"):
+                    yield Label("From", classes="k")
+                    yield Input(self.base, placeholder="base branch", id="base")
                 yield Label("", id="name")
             if self.source:
                 yield Checkbox(f"Move {self.n_changes} uncommitted changes from {self.source.path.name}",
@@ -64,10 +94,17 @@ class NewWorktreeScreen(ModalScreen["Path | None"]):
             yield Label("", id="error")
             yield Button("Create (Enter)", id="ok", variant="primary")
 
+    def _msg(self, id_: str, text: str) -> None:
+        lab = self.query_one(id_, Label)
+        lab.update(text)
+        lab.display = bool(text)  # no empty line when there is nothing to say
+
     def _is_new(self) -> bool:
         return self.query_one("#branch", Select).value == NEW
 
-    def _new_name(self) -> str:
+    def _auto_name(self) -> str:
+        if not self.patterns:
+            return ""
         return build(
             str(self.query_one("#template", Select).value),
             type=str(self.query_one("#type", Select).value),
@@ -76,13 +113,26 @@ class NewWorktreeScreen(ModalScreen["Path | None"]):
             date=datetime.datetime.now().astimezone().date().isoformat(),
         )
 
-    def _update(self) -> None:
+    def _new_name(self) -> str:
+        """Typed name wins; empty or untouched = the generated one."""
+        return self.query_one("#fullname", Input).value.strip() or self._auto_name()
+
+    def _base_hint(self) -> str:
+        base = self.query_one("#base", Input).value.strip() or self.base
+        r = _git(self.root, "rev-parse", "--short", "--verify", "--quiet", f"{base}^{{commit}}")
+        return f"from {base} ({r.stdout.strip()})" if r.returncode == 0 and base else f"from {base or '?'} (unknown ref)"
+
+    def _update(self, *, keep_name: bool = False) -> None:
         self.query_one("#new").display = self._is_new()
-        if self._is_new() and self.patterns:
-            self.query_one("#name", Label).update(f"Name: {self._new_name()}")
+        if self._is_new():
+            full = self.query_one("#fullname", Input)
+            if not keep_name and not self._edited:
+                self._auto = self._auto_name()
+                full.value = self._auto  # fires Input.Changed: equals _auto, so not "edited"
+            self.query_one("#name", Label).update(f"Branch {self._base_hint()}" if self._new_name() else "Enter a branch name")
         self._forced = None
-        self.query_one("#warn", Label).update("")
-        self.query_one("#error", Label).update("")
+        self._msg("#warn", "")
+        self._msg("#error", "")
 
     def on_mount(self) -> None:
         self.query_one("#dialog").border_title = "New worktree"
@@ -91,7 +141,10 @@ class NewWorktreeScreen(ModalScreen["Path | None"]):
     def on_select_changed(self, _ev: Select.Changed) -> None:
         self._update()
 
-    def on_input_changed(self, _ev: Input.Changed) -> None:
+    def on_input_changed(self, ev: Input.Changed) -> None:
+        if ev.input.id == "fullname":
+            self._edited = ev.value.strip() not in ("", self._auto)
+            return self._update(keep_name=True)
         self._update()
 
     def on_input_submitted(self, _ev: Input.Submitted) -> None:
@@ -104,7 +157,6 @@ class NewWorktreeScreen(ModalScreen["Path | None"]):
         self.dismiss(None)
 
     def _submit(self) -> None:
-        warn, err = self.query_one("#warn", Label), self.query_one("#error", Label)
         if not self._is_new():
             branch, base = str(self.query_one("#branch", Select).value), None
         else:
@@ -112,8 +164,8 @@ class NewWorktreeScreen(ModalScreen["Path | None"]):
             if not matches(branch, self.patterns) and self._forced != branch:
                 self._forced = branch  # second Enter on the same name forces it
                 hint = suggest(branch, self.patterns)
-                warn.update(f"Name violates templates {self.patterns}."
-                            + (f" Suggestion: {hint}." if hint else "") + " Enter again to create anyway.")
+                self._msg("#warn", f"Name violates templates {self.patterns}."
+                          + (f" Suggestion: {hint}." if hint else "") + " Enter again to create anyway.")
                 return
         try:
             if self.source and self.query_one("#move", Checkbox).value:
@@ -121,4 +173,4 @@ class NewWorktreeScreen(ModalScreen["Path | None"]):
             else:
                 self.dismiss(add_worktree(self.root, branch, base))
         except NewWorktreeError as e:
-            err.update(str(e))
+            self._msg("#error", str(e))

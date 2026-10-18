@@ -126,7 +126,7 @@ def test_enter_opens_terminal_or_hints(make_repo, monkeypatch):
 
 
 def test_new_worktree_dialog(make_repo):
-    from textual.widgets import Input, Label
+    from textual.widgets import Input
 
     root = _register(make_repo)
 
@@ -139,11 +139,12 @@ def test_new_worktree_dialog(make_repo):
                     break
             await pilot.press("n")
             await pilot.pause()
+            assert app.screen.query_one("#dialog").region.height <= 14  # compact: one row per field
             title = app.screen.query_one("#title", Input)
             title.value = "Cool thing"
             title.focus()
             await pilot.pause()
-            assert "feat/cool-thing" in str(app.screen.query_one("#name", Label).render())
+            assert app.screen.query_one("#fullname", Input).value == "feat/cool-thing"
             await pilot.press("enter")
             for _ in range(50):
                 await pilot.pause(0.1)
@@ -279,5 +280,42 @@ def test_app_border_titles_and_footer_shows_enter_once(make_repo, monkeypatch):
             await pilot.press("enter")
             await pilot.pause()
             assert opened == [root / "main"]  # exactly once
+
+    asyncio.run(run())
+
+
+def test_new_worktree_dialog_free_name_and_base(make_repo):
+    from textual.widgets import Input, Label
+
+    root = _register(make_repo)
+
+    async def run():
+        app = KvasirApp()
+        async with app.run_test(size=(100, 40)) as pilot:
+            for _ in range(50):
+                await pilot.pause(0.1)
+                if app.rows:
+                    break
+            await pilot.press("n")
+            await pilot.pause()
+            scr = app.screen
+            assert "from main (" in str(scr.query_one("#name", Label).render())  # base branch and commit are visible
+            full = scr.query_one("#fullname", Input)
+            full.value = "spike/my-own-name"
+            await pilot.pause()
+            scr.query_one("#title", Input).value = "later title"  # must not overwrite the typed name
+            await pilot.pause()
+            assert full.value == "spike/my-own-name"
+            full.focus()
+            await pilot.pause()
+            await pilot.press("enter")  # violates the templates: first Enter only warns
+            await pilot.pause()
+            assert not (root / "spike" / "my-own-name").exists()
+            await pilot.press("enter")
+            for _ in range(50):
+                await pilot.pause(0.1)
+                if (root / "spike" / "my-own-name").is_dir():
+                    break
+            assert (root / "spike" / "my-own-name").is_dir()
 
     asyncio.run(run())
