@@ -1,7 +1,6 @@
 """Modal form: add a Worktree for an existing or a new Branch. Dismisses with the new path or None."""
 from __future__ import annotations
 
-import datetime
 from pathlib import Path
 from typing import ClassVar
 
@@ -11,12 +10,12 @@ from textual.containers import Container, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Input, Label, Select
 
-from kvasir.branch_names import TYPES, build, matches, slugify, suggest
+from kvasir.branch_names import TYPES, auto_name, matches, suggest
 from kvasir.new_worktree import (
     NewWorktreeError,
-    _git,
     add_worktree,
     add_worktree_moving_changes,
+    base_hint,
     default_branch,
 )
 from kvasir.worktrees import Branch, Worktree
@@ -105,12 +104,11 @@ class NewWorktreeScreen(ModalScreen["Path | None"]):
     def _auto_name(self) -> str:
         if not self.patterns:
             return ""
-        return build(
+        return auto_name(
             str(self.query_one("#template", Select).value),
-            type=str(self.query_one("#type", Select).value),
-            id=self.query_one("#id", Input).value.strip(),
-            slug=slugify(self.query_one("#title", Input).value),
-            date=datetime.datetime.now().astimezone().date().isoformat(),
+            str(self.query_one("#type", Select).value),
+            self.query_one("#id", Input).value,
+            self.query_one("#title", Input).value,
         )
 
     def _new_name(self) -> str:
@@ -119,8 +117,7 @@ class NewWorktreeScreen(ModalScreen["Path | None"]):
 
     def _base_hint(self) -> str:
         base = self.query_one("#base", Input).value.strip() or self.base
-        r = _git(self.root, "rev-parse", "--short", "--verify", "--quiet", f"{base}^{{commit}}")
-        return f"from {base} ({r.stdout.strip()})" if r.returncode == 0 and base else f"from {base or '?'} (unknown ref)"
+        return f"from {base_hint(self.root, base)}"
 
     def _update(self, *, keep_name: bool = False) -> None:
         self.query_one("#new").display = self._is_new()

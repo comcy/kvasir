@@ -322,6 +322,19 @@ kvasir doctor                        # prüft kitty-Fernsteuerung und [workspace
 - `open_command` ist nicht nötig (Standard `kitty --directory {path}`). Außerhalb von kitty (`KITTY_WINDOW_ID` fehlt) fällt `o` auf normales Öffnen zurück.
 - `[report]` und `[llm]` nur nötig, wenn `kvasir today` bzw. die LLM-Funktionen genutzt werden.
 
+## Worktree anlegen per CLI
+
+```
+kvasir worktree add [<branch>] [--from <base>] [--move-changes | --no-move-changes] [--force-name] [--repo <pfad>] [--interactive/-i]
+cd "$(kvasir worktree add feat/x)"
+```
+
+- `<branch>` vorhanden (lokal/remote) -> Worktree dafür; sonst neuer Branch ab `--from` (Standard: Default-Branch). Branchname = Ordnername.
+- Namen werden gegen die Branch-Vorlagen geprüft (wie in der TUI); Verstoß -> Fehler mit Vorschlag, Exit 1, außer `--force-name`.
+- `--move-changes`: uncommittete Änderungen des Worktrees, in dem man steht, wandern in den neuen (wie `n` in der TUI). Ohne Flag bleibt alles unberührt (Hinweis auf stderr).
+- `--interactive`/`-i`: fragt Fehlendes ab (Branch, Vorlage/Typ/ID/Titel mit Namensvorschlag, Basis, Verschieben, Bestätigung). Braucht ein Terminal.
+- stdout: nur der Pfad; Prompts und Meldungen auf stderr.
+
 ## Scratch-Worktrees
 
 Einen Branch/Ref isoliert ansehen, ohne Arbeitsstand, Branches oder Remote anzufassen: detached Worktree (`git worktree add --detach`), kein Branch. Gestartet wird nur git, nie Tests, Linter oder Installationen.
